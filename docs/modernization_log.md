@@ -260,6 +260,25 @@ on a block. Tiingo needs **no spacing at all** but a hard **hourly/daily request
 These are different mechanisms; the two ingestion jobs must not share one rate-limiter
 implementation.
 
+### 6.2b Phase 5: `splitFactor` arithmetic direction (`mizan/backtest/portfolio.py`, `PHASE_5_SPEC.md` §0.1/§2.5/§6a)
+
+**Verified live 2026-08-31**, resolving the build-time verification item `PHASE_5_SPEC.md` §0.1
+named rather than guessed: Tiingo's own splits documentation
+(https://www.tiingo.com/documentation/corporate-actions/splits, fetched this pass) states, quoted
+verbatim: *"The ratio of splitTo from splitFrom. In other words: splitFactor = splitTo/splitFrom.
+This ratio is helpful in calculating split price adjustments."* A live worked example (Realty
+Income, 2021-11-15, a 1-to-1.0327 split, `splitFactor: 1.0327`) confirms `splitFactor` directly
+states how many new shares one old share becomes.
+
+**Consequence for `apply_split` (§4.1):** `splitFactor` is the multiplier applied to a **held share
+count**, not its reciprocal — a 2-for-1 split (`splitTo=2, splitFrom=1`) carries `splitFactor=2.0`,
+and 100 held shares become `100 * 2.0 = 200` shares. `mizan/backtest/portfolio.py`'s `apply_split`
+therefore computes `new_quantity = holding.quantity * split_factor`. This is the arithmetic
+direction that keeps `quantity * raw_close` continuous across the split (post-split raw prices are
+correspondingly lower, roughly `raw_close / split_factor`, on Tiingo's own convention) — the build
+does not additionally re-derive that price-side identity, since `mizan/backtest/portfolio.py` never
+adjusts price, only share count, per `PHASE_5_SPEC.md` §6a's `raw_close`-governs-valuation decision.
+
 ### 6.3 Phase 4: XBRL concept-tag verification (`mizan/screening/financial_ratios.py` §2.2)
 
 Every tag `financial_ratios.py`'s four allow-lists name was checked live 2026-08-30 against real

@@ -350,6 +350,94 @@ ZZNODATA01 = SyntheticTicker(
     facts=(_revenue_fact(),),
 )
 
+#: Phase 5 (`PHASE_5_SPEC.md` §6e/§8 AC1): a ticker that is Layer-1-clean and all-zero-ratio
+#: compliant at an EARLY as_of_date, then flips to `Verdict.NON_COMPLIANT` at a LATER as_of_date —
+#: proving the backtest engine's flip -> grace -> divest state machine (`mizan.backtest.
+#: compliance_state`) fires on a real, time-varying `screen()` result, not a fixture rigged to be
+#: permanently one verdict. The mechanism is the SAME "most-recently-filed-as-of `as_of_date`" fact
+#: resolution `ZZLOOKAHEAD01` above already exercises — two `LongTermDebtNoncurrent` facts under the
+#: same tag, filed on different dates, so which one `screen()` sees depends entirely on which
+#: `as_of_date` a caller passes:
+#:   * `screen(..., as_of_date=date(2026, 1, 1))`: only the EARLY fact (0.0 debt, filed 2025-06-01)
+#:     is visible -> debt ratio 0.0 -> `Verdict.PURE`.
+#:   * `screen(..., as_of_date=date(2026, 4, 1))` or any LATER date: the SECOND fact (50,000,000
+#:     debt, filed 2026-02-01, i.e. strictly after the first rebalance and strictly before the
+#:     second) is now the most-recently-filed row for this tag -> debt ratio 50% > the 30% threshold
+#:     -> `Verdict.NON_COMPLIANT`, and stays that way at every later as_of_date (no third fact).
+#: Price bars are provided on each of the four calendar-quarter-boundary dates a Phase 5 test
+#: backtest over the window `date(2026, 1, 1)` .. `date(2026, 10, 15)` rebalances on
+#: (`mizan.backtest.clock.generate_rebalance_dates`), each `raw_close=100.0` against 1,000,000
+#: shares outstanding — the same `DENOMINATOR = 100,000,000.0` convention every other Layer-2-
+#: reaching fixture ticker above uses.
+ZZFLIP01_EARLY_DEBT_FACT = FundamentalsFactFixture(
+    taxonomy="us-gaap",
+    tag="LongTermDebtNoncurrent",
+    unit="USD",
+    period_start=date(2025, 12, 31),
+    period_end=date(2025, 12, 31),
+    is_instantaneous=True,
+    value=0.0,
+    accn="9990000013-26-000003",
+    filed=date(2025, 6, 1),
+)
+
+ZZFLIP01_FLIP_DEBT_FACT = FundamentalsFactFixture(
+    taxonomy="us-gaap",
+    tag="LongTermDebtNoncurrent",
+    unit="USD",
+    period_start=date(2025, 12, 31),
+    period_end=date(2025, 12, 31),
+    is_instantaneous=True,
+    value=50_000_000.0,
+    accn="9990000013-26-000004",
+    filed=date(2026, 2, 1),
+)
+
+ZZFLIP01 = SyntheticTicker(
+    ticker="ZZFLIP01",
+    cik="9990000013",
+    sic=_CLEAN_SIC,
+    description=(
+        "Phase 5 §6e/§8 AC1: PURE as of 2026-01-01 (only the 0.0-debt fact filed <= that date is "
+        "visible), NON_COMPLIANT as of 2026-04-01 and every later rebalance date (a 50,000,000 "
+        "debt fact filed 2026-02-01 becomes the most-recently-filed value) -> the flip -> grace -> "
+        "divest state machine's own worked example, run against a real, time-varying screen() "
+        "result rather than a rigged-permanent verdict."
+    ),
+    facts=(
+        FundamentalsFactFixture(
+            taxonomy="dei",
+            tag="EntityCommonStockSharesOutstanding",
+            unit="shares",
+            period_start=date(2025, 12, 31),
+            period_end=date(2025, 12, 31),
+            is_instantaneous=True,
+            value=1_000_000.0,
+            accn="9990000013-26-000001",
+            filed=date(2025, 6, 1),
+        ),
+        FundamentalsFactFixture(
+            taxonomy="us-gaap",
+            tag="Revenues",
+            unit="USD",
+            period_start=date(2025, 1, 1),
+            period_end=date(2025, 12, 31),
+            is_instantaneous=False,
+            value=50_000_000.0,
+            accn="9990000013-26-000002",
+            filed=date(2025, 6, 1),
+        ),
+        ZZFLIP01_EARLY_DEBT_FACT,
+        ZZFLIP01_FLIP_DEBT_FACT,
+    ),
+    price_bars=(
+        PriceBarFixture(trade_date=date(2026, 1, 1), raw_close=100.0),
+        PriceBarFixture(trade_date=date(2026, 4, 1), raw_close=100.0),
+        PriceBarFixture(trade_date=date(2026, 7, 1), raw_close=100.0),
+        PriceBarFixture(trade_date=date(2026, 10, 1), raw_close=100.0),
+    ),
+)
+
 ALL_SYNTHETIC_TICKERS: tuple[SyntheticTicker, ...] = (
     ZZPURE01,
     ZZMIXED01,
@@ -363,6 +451,7 @@ ALL_SYNTHETIC_TICKERS: tuple[SyntheticTicker, ...] = (
     ZZBOUNDARY01,
     ZZLOOKAHEAD01,
     ZZNODATA01,
+    ZZFLIP01,
 )
 
 

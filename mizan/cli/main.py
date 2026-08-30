@@ -9,6 +9,7 @@ import argparse
 import sys
 from collections.abc import Callable, Sequence
 
+from mizan.cli import backtest as backtest_cli
 from mizan.cli import ingest as ingest_cli
 from mizan.cli import normalize as normalize_cli
 from mizan.cli import screen as screen_cli
@@ -20,8 +21,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     Registers one subparser per verb; Phase 2 registered `ingest`
     (`mizan.cli.ingest.add_subparser`), Phase 3 added `normalize`
-    (`mizan.cli.normalize.add_subparser`), Phase 4 adds `screen`
-    (`mizan.cli.screen.add_subparser`). Later phases each add one line here for their verb — this
+    (`mizan.cli.normalize.add_subparser`), Phase 4 added `screen`
+    (`mizan.cli.screen.add_subparser`), Phase 5 adds `backtest`
+    (`mizan.cli.backtest.add_subparser`). Later phases each add one line here for their verb — this
     file is the one place later phases touch in `mizan/cli/`, per PHASE_2_SPEC.md §1's
     additive-extension note.
     """
@@ -32,6 +34,7 @@ def build_parser() -> argparse.ArgumentParser:
     ingest_cli.add_subparser(subparsers)
     normalize_cli.add_subparser(subparsers)
     screen_cli.add_subparser(subparsers)
+    backtest_cli.add_subparser(subparsers)
     return parser
 
 
