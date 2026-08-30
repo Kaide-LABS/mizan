@@ -1,10 +1,11 @@
 # COMPREHENSION.md — Mizan
 
-Written after Phase 3 ("Normalization & DuckDB Store") was reviewed and approved. Sections 1–6
-below describe the repository as it exists right now — Phase 1 ("Foundation & Config"), Phase 2
-("Ingestion & Raw Cache"), and Phase 3 combined — grounded in the code read directly this pass, not
-in what any spec or prior handoff claimed. The Phase Log at the bottom is append-only; Phase 1's and
-Phase 2's entries are preserved untouched below the new Phase 3 entry.
+Written after Phase 4 ("Screening Engine") was reviewed and approved. Sections 1–6 below describe
+the repository as it exists right now — Phase 1 ("Foundation & Config"), Phase 2 ("Ingestion & Raw
+Cache"), Phase 3 ("Normalization & DuckDB Store"), and Phase 4 combined — grounded in the code read
+directly this pass, not in what any spec or prior handoff claimed. The Phase Log at the bottom is
+append-only; Phase 1's, Phase 2's, and Phase 3's entries are preserved untouched below the new
+Phase 4 entry.
 
 ---
 
@@ -36,34 +37,51 @@ dividends) — and to save every single response it gets to a local folder on di
 anything else with it. The point of saving everything first is honesty and reproducibility: if the
 program is run again for the same ticker and date range, it re-uses what it already saved instead
 of asking the data provider again, and if something ever looks wrong with the saved data, a human
-can open the actual file on disk and see exactly what the data source sent, unmodified. Phase 2 also
-taught the program to be a polite, rule-following guest of both data providers, respecting SEC's
-request-spacing rule and Tiingo's hourly/daily/monthly usage caps, and to flag one specific kind of
-suspicious price-history pattern (a share-count-changing "split" with no dividend recorded on the
-same day) for a human to look at.
+can open the actual file on disk and see exactly what the data source sent, unmodified.
 
-Phase 3, the subject of this update, is the first phase that turns those saved-but-still-raw files
-into something a computer program can actually query and trust. Up through Phase 2, "the data" was
-just a pile of JSON files on disk, shaped exactly like whatever SEC or Tiingo happened to send. Phase
-3 reads that pile, checks every entry against a strict, typed shape, and loads it into a real local
-database (DuckDB) — one table for company financial facts (revenue, assets, and so on, pulled from
-SEC filings) and one table for daily stock prices. Two kinds of protection are built directly into
-this loading step, not left as something a human has to remember to check later: first, if the same
-financial fact or the same trading day is loaded twice, the database itself refuses to silently
-double up or silently overwrite — a genuine conflict (the same fact reported two different ways)
-stops the program and tells the human exactly what disagreed, while re-loading the exact same data
-twice in a row is safely treated as a no-op. Second, if SEC's filing data ever reports a number in a
-unit of measurement Mizan doesn't already know how to handle (something other than plain US dollars
-or a plain share count), the program refuses to guess at a conversion — it stops and asks a human to
-look, rather than silently assuming a scale that might be wrong.
+Phase 3 turned those saved-but-still-raw files into something a computer program can actually query
+and trust. Up through Phase 2, "the data" was just a pile of JSON files on disk, shaped exactly like
+whatever SEC or Tiingo happened to send. Phase 3 reads that pile, checks every entry against a
+strict, typed shape, and loads it into a real local database (DuckDB) — one table for company
+financial facts (revenue, assets, and so on, pulled from SEC filings) and one table for daily stock
+prices, with a duplicate guard and a closed unit-of-measurement allow-list built directly into the
+loading step.
 
-Still nothing here screens a stock for compliance or runs a backtest — no money is simulated, no
-pass/fail verdict is produced yet. What exists after Phase 3 is: the settled/disputed rule registry
-from Phase 1; the working, rate-limit-respecting, replay-safe data-pulling pipeline from Phase 2; and
-now, new this phase, a real typed local database that the screening and backtest phases still to
-come will actually read from — built with the specific protections needed so that "duplicate data"
-and "a number in a unit we don't understand" can never quietly corrupt what those later phases will
-trust.
+**Phase 4, the subject of this update, is the first phase where Mizan actually decides whether a
+company is halal to invest in.** Given a ticker symbol and a date, `mizan screen` now runs two
+checks in order. First, a business-activity check: does the company's registered industry code (SIC
+code) fall into a "definitely excluded" bucket (conventional banks, insurers, alcohol, tobacco,
+non-halal food) or one of two more debatable buckets (adult content/weapons; media/hotels) that the
+owner can turn on or off? If a company is excluded here, screening stops immediately — no amount of
+financial cleanliness can rescue a company whose core business itself is disqualifying. Second, if
+the business-activity check passes, a financial-ratio check: how much interest-bearing debt does the
+company carry relative to its size, how much interest-bearing investment/deposit does it hold, and
+how much of its revenue comes from non-halal sources (mainly interest income) — each compared
+against a configurable percentage threshold (30%/30%/5% by default, from AAOIFI's own published
+methodology). The combination of these two checks produces one of three verdicts — Pure (fully
+clean), Mixed (compliant but with some incidental non-halal income requiring "purification," a later
+phase's job), or Non-compliant — always accompanied by a full, human-readable explanation of exactly
+which check drove the result and by how much.
+
+Two things this phase deliberately did NOT do, stated as plainly as the project's own honesty
+discipline demands: it did not hardcode any company-industry classification the SIC-code check
+alone would get wrong (a company can be given a manually-researched override, but the map ships
+completely empty — no per-ticker research is baked in), and it did not build the real universe of
+~100 stocks a person would actually want to screen. **What exists after Phase 4 is a working, fully
+tested screening engine — proven correct only against about a dozen invented example companies
+(with names like `ZZPURE01`, clearly labeled as fake, never real issuers) built specifically to
+exercise every rule the engine implements. It does not yet produce a trustworthy real-world
+screening result for any actual company, unless the tool's owner has separately done the hand-
+research needed to supply a real SIC override map.** That hand-research is explicitly the owner's
+own future work, not something an automated build was ever supposed to fabricate.
+
+Still nothing here runs a backtest or simulates a portfolio — no money is simulated yet, no strategy
+picks stocks yet. What exists after Phase 4 is: the settled/disputed rule registry from Phase 1; the
+working, rate-limit-respecting, replay-safe data-pulling pipeline from Phase 2; the typed local
+database from Phase 3; and now, new this phase, a real, working three-state compliance screen with a
+full audit trail — the first piece of Mizan that actually answers "is this halal?" for a single
+ticker on a single date, even though the answer is only as good as the (currently synthetic, or
+owner-supplied) data behind it.
 
 ## 2. Architecture walkthrough
 
@@ -81,7 +99,7 @@ mizan/
 ├── core/
 │   ├── __init__.py               # empty
 │   ├── base.py                   # MizanBaseModel — the one shared base every data model in the project must use
-│   ├── verdict.py                # Verdict — the three-state pass/partial/fail screening outcome (definition only)
+│   ├── verdict.py                # Verdict — the three-state pass/partial/fail screening outcome (definition ONLY — see §2's naming note below)
 │   └── caveats.py                # Caveat enum + ResultEnvelope — the mandatory warning-label wrapper for results
 ├── data/
 │   ├── __init__.py                # empty
@@ -89,13 +107,20 @@ mizan/
 │   ├── raw_cache.py               # shared cache-path / cache-hit / atomic-write / read helpers, both legs (Phase 2)
 │   ├── ingest_edgar.py            # EDGAR client: rate limiter, header construction, CIK resolution, fetch fns (Phase 2)
 │   ├── ingest_tiingo.py           # Tiingo client: request/symbol budget limiter, EOD fetch, anomaly scan (Phase 2)
-│   ├── db.py                      # NEW this phase — DuckDB connection + idempotent schema creation
-│   └── normalize.py               # NEW this phase — typed row shapes + raw-cache-to-DuckDB mapping functions
+│   ├── db.py                      # DuckDB connection + idempotent schema creation (Phase 3)
+│   └── normalize.py               # typed row shapes + raw-cache-to-DuckDB mapping functions, incl. resolve_cik_offline (Phase 3)
+├── screening/                      # NEW this phase — the whole package is new
+│   ├── __init__.py                 # NEW — empty, package marker only
+│   ├── business_activity.py        # NEW — SIC-code first-pass tier classifier + pluggable, ships-empty override map
+│   ├── financial_ratios.py         # NEW — the 30/30/5 ratio arithmetic, pure functions over already-resolved floats
+│   └── verdict.py                  # NEW — screen(), the canonical entry point; combines both layers into a Verdict +
+│                                    #        reason trace. DISTINCT from mizan/core/verdict.py — see the naming note below.
 └── cli/
     ├── __init__.py                # empty
-    ├── main.py                    # `mizan` console-script entrypoint — boot-check-first dispatcher (MODIFIED this phase: registers `normalize`)
-    ├── ingest.py                  # the `ingest` subcommand: argument parsing, per-ticker orchestration (Phase 2, untouched this phase)
-    └── normalize.py               # NEW this phase — the `normalize` subcommand
+    ├── main.py                    # `mizan` console-script entrypoint — boot-check-first dispatcher (MODIFIED this phase: registers `screen`)
+    ├── ingest.py                  # the `ingest` subcommand (Phase 2, untouched this phase)
+    ├── normalize.py               # the `normalize` subcommand (Phase 3, untouched this phase)
+    └── screen.py                  # NEW this phase — the `screen` subcommand
 tests/
 ├── __init__.py                   # empty
 ├── test_invariants.py            # proves the boot check actually rejects a broken settled-rule config
@@ -106,405 +131,431 @@ tests/
 ├── test_ingest_edgar.py          # rate limiter timing, header contract, CIK resolution, HALT paths
 ├── test_ingest_tiingo.py         # budget throttling, symbol-log drift, anomaly scan, token handling
 ├── test_cli_ingest.py            # CLI arg parsing, boot-gate-first dispatch, per-ticker HALT/continue behaviour
-├── test_data_db.py               # NEW this phase — schema idempotency, PRIMARY KEY enforcement, single-writer lock behaviour
-├── test_data_normalize.py        # NEW this phase — unit-rejection, duplicate-guard, idempotent replay, column contract
-└── test_cli_normalize.py         # NEW this phase — boot-gate-first behaviour, offline-only dispatch, exit codes
+├── test_data_db.py               # schema idempotency, PRIMARY KEY enforcement, single-writer lock behaviour
+├── test_data_normalize.py        # unit-rejection, duplicate-guard, idempotent replay, column contract
+├── test_cli_normalize.py         # boot-gate-first behaviour, offline-only dispatch, exit codes
+├── fixtures/                       # NEW this phase
+│   ├── __init__.py                 # NEW — package marker
+│   └── synthetic_universe.py       # NEW — ~12 SYNTHETIC, clearly-labeled fixture tickers (ZZPURE01, ZZMIXED01, etc.)
+│                                    #        and the helpers that materialize them into a cache dir / DuckDB connection
+├── test_screening_business_activity.py  # NEW this phase — SIC_TIER_MAP lookups, override precedence both directions, tier toggles
+├── test_screening_financial_ratios.py   # NEW this phase — ratio arithmetic, boundary (<=) semantics, numerator-vs-denominator asymmetry
+├── test_screening_verdict.py             # NEW this phase — screen() end-to-end over the synthetic universe, fail-fast, look-ahead non-interference
+└── test_cli_screen.py                    # NEW this phase — CLI arg parsing, boot-gate-first dispatch, per-ticker HALT/continue behaviour
 .env.example                       # TIINGO_API_TOKEN placeholder template, never a real credential
-pyproject.toml                    # project metadata, exact dependency version pins, mypy/ruff/pytest config, CLI entry points (MODIFIED this phase)
-docs/modernization_log.md         # a running log of exactly which external tool/library versions and API contracts were verified and when (MODIFIED this phase)
-.gitignore                        # MODIFIED this phase — *.duckdb, *.duckdb.wal added
-PHASE_3_SPEC.md                   # NEW this phase — the Phase 3 build contract
+pyproject.toml                    # project metadata, exact dependency version pins, mypy/ruff/pytest config, CLI entry points (UNCHANGED this phase — §2.1)
+docs/modernization_log.md         # a running log of exactly which external tool/library versions and API contracts were verified and when (MODIFIED this phase — §6.3, §6.4)
+.gitignore                        # UNCHANGED this phase
+PHASE_4_SPEC.md                   # NEW this phase — the Phase 4 build contract
 ```
+
+**The two `verdict.py` files, named explicitly so a future reader is never confused (confirmed by
+reading both files in full this pass):** `mizan/core/verdict.py` (Phase 1, unmodified by this
+phase's diff — confirmed via `git diff e9a62c3..0060cfd -- mizan/core/verdict.py`, empty) defines
+*only* the three-state `Verdict` **enum** — `PURE`/`MIXED`/`NON_COMPLIANT` — with no scoring logic
+of its own. `mizan/screening/verdict.py` is a different, much larger module (441 lines) that is
+where `screen(ticker, as_of_date)` itself lives, where the business-activity and financial-ratio
+layers are combined, and where the reason trace is assembled. Every reference to the enum inside the
+new module imports it by full path (`from mizan.core.verdict import Verdict`), never as a bare
+`Verdict`, specifically so a `grep -n "Verdict"` distinguishes "the enum" from "the module that
+produces it" — confirmed by direct read of `mizan/screening/verdict.py` line 49.
 
 How the Phase 1 pieces connect (unchanged, still true, re-verified this pass):
 
-- `mizan/core/base.py` defines `MizanBaseModel`, a Pydantic model with three settings turned on that
-  Pydantic does not turn on by default: unknown fields are rejected outright rather than silently
-  dropped, every instance is immutable once created, and default values are validated the same as
-  any user-supplied value. Every other model class in the project — `Invariants`, `FiqhParam`,
-  `FiqhParams`, `ResultEnvelope`, every Phase 2 model in `mizan/data/models.py`, and now Phase 3's
-  `FundamentalsFactRow`/`PriceBarRow` (`mizan/data/normalize.py`) — inherits from this one base. A
-  boundary grep re-run this pass (`grep -rn "BaseModel" mizan/`) confirms the literal string
-  `BaseModel` still appears only inside `core/base.py` itself and as an import target elsewhere, not
-  as a second base class definition anywhere in the tree.
+- `mizan/core/base.py` defines `MizanBaseModel`. Every new Phase 4 model —
+  `ActivityOverride`/`BusinessActivityOverrideMap`/`BusinessActivityScreenResult` in
+  `business_activity.py`, `FinancialRatioScreenResult` in `financial_ratios.py`, and
+  `ReasonTraceEntry`/`ScreeningVerdict` in `verdict.py` — inherits from it, confirmed by direct read
+  of every one of those class definitions.
 - `mizan/config/invariants.py`, `mizan/config/fiqh_params.py`, and `mizan/config/boot_check.py`
-  behave exactly as Phase 1's comprehension pass described — untouched by Phase 2's or Phase 3's
-  diff (`git diff e73e9cc..8e99809` touches none of `mizan/config/`).
-- `mizan/core/verdict.py` and `mizan/core/caveats.py` are likewise untouched.
+  behave exactly as prior comprehension passes described — confirmed untouched by Phase 4's diff
+  (`git diff e9a62c3..0060cfd -- mizan/config/` is empty).
+- `mizan/core/caveats.py` is likewise untouched.
 
-How the Phase 2 pieces connect (unchanged, still true, re-verified this pass):
+How the Phase 2 and Phase 3 pieces connect (unchanged, still true, re-verified this pass):
 
-- `mizan/data/models.py` defines five schemas, all subclassing `MizanBaseModel`: `CompanyTickerEntry`,
-  `EdgarFactRow`, `EdgarSubmissionRecord`, `TiingoEodBar`, and `TiingoCorporateActionEvent`. Wire-format
-  field names are kept verbatim (camelCase where SEC/Tiingo actually use camelCase) — this phase's
-  own new file, `mizan/data/normalize.py`, is where that camelCase is finally translated into
-  snake_case, per Phase 2's own docstrings' forward declaration (see §3 below).
-- `mizan/data/raw_cache.py` remains the one shared home for cache mechanics both ingestion legs use;
-  Phase 3's `normalize.py` reuses `cache_path()`, `is_cached()`, and `read_raw_json()` from this
-  module directly rather than re-deriving cache-path logic.
-- `mizan/data/ingest_edgar.py` and `mizan/data/ingest_tiingo.py` are untouched by Phase 3's diff.
-  Phase 3's `resolve_cik_offline` (below) imports and re-raises `ingest_edgar.CikResolutionError`
-  rather than defining a new exception type for the same failure kind.
-- `mizan/cli/ingest.py` is untouched.
+- `mizan/data/raw_cache.py`'s `cache_path`/`is_cached`/`read_raw_json` are reused directly by Phase
+  4's own `resolve_sic_offline` (`mizan/screening/business_activity.py`), the same pattern Phase 3's
+  `resolve_cik_offline` already established.
+- `mizan/data/ingest_edgar.py`'s `CikResolutionError` is imported and reused by
+  `mizan/cli/screen.py` — no new exception type for the same failure kind.
+- `mizan/data/normalize.py`'s `resolve_cik_offline` is imported directly by
+  `mizan/screening/verdict.py`'s `screen()` — Phase 4 does not re-derive ticker→CIK resolution.
+- `mizan/data/db.py` and `mizan/data/normalize.py` are themselves untouched by Phase 4's diff
+  (confirmed: neither file appears in `git diff e9a62c3..0060cfd --stat`) — Phase 4 is a read-only
+  consumer of the `fundamentals_facts`/`price_bars` tables those modules already built.
+- `mizan/cli/ingest.py` and `mizan/cli/normalize.py` are untouched.
 
-How the new Phase 3 pieces connect:
+How the new Phase 4 pieces connect:
 
-- `mizan/data/db.py` is the one canonical home for opening a DuckDB connection and creating Phase
-  3's two tables. `connect(db_path, *, read_only=False)` creates `db_path`'s parent directories,
-  opens the file via `duckdb.connect()`, and — unless `read_only=True` — calls `ensure_schema(con)`
-  before returning, so no caller can obtain a writable connection to a database missing either
-  table. `ensure_schema` runs `CREATE TABLE IF NOT EXISTS` for both `fundamentals_facts` and
-  `price_bars`, then calls a private `_verify_columns` helper that reads each table's actual column
-  set back via `PRAGMA table_info(...)` and raises `SchemaError` if it disagrees with what this
-  module would create — a defensive check specifically because `CREATE TABLE IF NOT EXISTS` itself
-  silently no-ops against a same-named table with a different column set. `read_only=True` (for
-  Phase 4+ read-only consumers) skips schema creation and, verified this pass via
-  `tests/test_data_db.py::test_connect_read_only_does_not_create_schema_on_a_new_file`, raises
-  rather than creating a new file when none exists.
-- `mizan/data/normalize.py` defines two new Pydantic row shapes, `FundamentalsFactRow` and
-  `PriceBarRow`, and the functions that populate them: `normalize_edgar_facts(cik, *, cache_dir,
-  con)` reads the already-cached `edgar/companyfacts/{cik}.json` file (never fetches; raises
-  `NotIngestedError` if it is absent), walks every `facts.{taxonomy}.{tag}.units.{unit}` entry,
-  raises `UnrecognizedUnitError` immediately if `unit` is outside the closed
-  `RECOGNIZED_XBRL_UNITS = frozenset({"USD", "shares"})` allow-list (checked before any row for that
-  unit is built), and otherwise maps each fact object (re-validated via Phase 2's own `EdgarFactRow`
-  model) into a `FundamentalsFactRow`, substituting `period_start = period_end` with
-  `is_instantaneous = True` whenever the raw fact's `start` is `None`. `normalize_tiingo_bars(ticker,
-  start_date, end_date, *, cache_dir, con)` does the equivalent for the cached Tiingo EOD file,
-  re-validating each bar via Phase 2's `TiingoEodBar` model and mapping `open`/`high`/`low`/`close`
-  to `raw_open`/`raw_high`/`raw_low`/`raw_close` and `adjOpen`/etc. to `adj_open`/etc., with every
-  field assigned on its own line from its own named source attribute (no shared local variable
-  aliases `raw_close` and `adj_close` to each other, confirmed by direct read of the function body,
-  `mizan/data/normalize.py` lines 299–317). Both normalize functions delegate the actual DuckDB
-  write to a shared private helper, `_bulk_load` (below). `resolve_cik_offline(ticker, *, cache_dir)`
-  is a separate, network-free ticker→CIK lookup reading only the already-cached
-  `company_tickers.json` — its signature has no client/network parameter at all (confirmed by
-  `inspect.signature`, exercised directly in `tests/test_data_normalize.py`), and it reuses Phase
-  2's `CikResolutionError` rather than defining a new one.
-- `_bulk_load(con, *, table, rows, key_columns, conflict_error_cls)` (private to
-  `mizan/data/normalize.py`) is the shared dedup-then-insert pattern both normalize functions use:
-  it converts the validated Pydantic rows to a `pyarrow.Table` via `pyarrow.Table.from_pylist`,
-  `register()`s it under DuckDB as a queryable view named `_staging`, runs a pre-insert conflict
-  check (`_raise_on_conflict`) that raises `conflict_error_cls` (either `DuplicateFactRowError` or
-  `DuplicatePriceBarError`) the moment any staged row's key matches an existing row with a
-  *different* non-key value, and — only if no conflict was found — runs one
-  `INSERT INTO {table} SELECT s.* FROM _staging s WHERE NOT EXISTS (...)` so that a row whose key
-  already exists with byte-identical other-column values is silently skipped as an idempotent
-  no-op, never an error. `_bulk_load` always `unregister()`s `_staging` in a `finally` block. The
-  table's own `PRIMARY KEY` constraint (§4 below) is a last-resort backstop, not the primary
-  mechanism, if `_raise_on_conflict`'s own query is ever itself wrong.
-- `mizan/cli/normalize.py` registers `normalize --ticker TICKER [--ticker TICKER ...] --start-date
-  YYYY-MM-DD --end-date YYYY-MM-DD --cache-dir PATH --db-path PATH` (`--ticker` repeatable,
-  `--db-path` required with no default, mirroring `--cache-dir`'s no-default posture from Phase 2).
-  Its `run()` opens exactly one `db.connect(args.db_path)` connection for the whole batch inside a
-  `with` block (closed on every exit path, including a halted one), and for each ticker calls
-  `resolve_cik_offline` → `normalize_edgar_facts` → `normalize_tiingo_bars` in that order, catching
-  `CikResolutionError`/`NotIngestedError`/`UnrecognizedUnitError`/`DuplicateFactRowError`/
-  `DuplicatePriceBarError` per ticker, printing `HALT [{ticker}]: {ExceptionType}: {message}` to
-  stderr, and continuing to the next ticker — but returning exit code `1` if any ticker halted,
-  mirroring `mizan.cli.ingest.run`'s contract exactly (verified line-for-line against
-  `mizan/cli/normalize.py` lines 92–111).
-- `mizan/cli/main.py`'s `build_parser()` now registers two subparsers — Phase 2's `ingest` and this
-  phase's `normalize` (`normalize_cli.add_subparser(subparsers)`, one added line, confirmed by
-  reading the diff and the current file) — and `main()`'s boot-check-first dispatch (`check_all()`
-  before any subcommand) is otherwise unchanged, so `mizan normalize` also halts before any DuckDB
-  file is created if the Phase 1 foundation is broken (verified by
-  `tests/test_cli_normalize.py::test_main_halts_on_invariant_violation_before_any_duckdb_file_is_created`,
-  which asserts the target `--db-path` file does not exist afterward).
-- `pyproject.toml` promotes `duckdb==1.5.5` and `pyarrow==25.0.1` from Phase 1's forward-declared
-  `[project.optional-dependencies].data` extra to real `[project.dependencies]` entries — Phase 3 is
-  the first phase that imports either. The `data` extra is narrowed to `pandas==3.0.5` alone, still
-  forward-declared and unused. A new `[[tool.mypy.overrides]]` block silences mypy's
-  import-untyped complaint for `pyarrow.*` specifically (pyarrow ships no inline type stubs), without
-  relaxing `--strict` for any Mizan-owned module.
-- `docs/modernization_log.md` gained three new entries this phase (all read in full this pass): a
-  dated live re-check confirming `duckdb==1.5.5`/`pyarrow==25.0.1` are still PyPI's newest releases;
-  a live-verified confirmation that DuckDB's `INSERT` raises `duckdb.ConstraintException` on a
-  PRIMARY KEY collision; and a correction to the previously-logged single-writer-lock note (§3
-  below) — the file lock is enforced by the OS across processes, not by a second same-process
-  `connect()` call.
-- `.gitignore` gained `*.duckdb` and `*.duckdb.wal`, confirmed this pass by creating a real,
-  throwaway `.duckdb` file at the repo root via `mizan.data.db.connect` and running
-  `git check-ignore -v` against it — it reports the file matched by `.gitignore:10:*.duckdb`.
+- **`mizan/screening/business_activity.py`** (356 lines) defines `BusinessActivityTier`
+  (`TIER_0`/`TIER_0_5`/`TIER_1`, a `StrEnum` whose values are names, never meant to be ordered),
+  `ClassificationSource` (`SIC_FIRST_PASS`/`OVERRIDE_MAP`), `ActivityOverride` (one override entry:
+  `cik`, `ticker`, `tier_override: BusinessActivityTier | None`, mandatory non-empty `rationale`),
+  `BusinessActivityOverrideMap` (`overrides: dict[str, ActivityOverride]`, keyed by zero-padded
+  10-digit CIK, never ticker), `BusinessActivityScreenResult`, and `SicResolutionError`. Its module
+  constant `SIC_TIER_MAP` (a closed `dict[str, BusinessActivityTier]`) maps 21 real, SEC-verified
+  SIC codes across the three tiers (§4 below has the full table). `resolve_sic_offline(cik, *,
+  cache_dir)` reads the already-cached `edgar/submissions/{cik}.json` raw file (written by Phase 2,
+  never re-fetched) and returns its `sic` field, raising `SicResolutionError` if the cache entry is
+  missing or has no usable `sic` key; it takes no network parameter at all. `load_override_map(path)`
+  returns an honest empty `BusinessActivityOverrideMap(overrides={})` when `path is None` (no file
+  read), or `model_validate_json`s a given path, raising `pydantic.ValidationError` on any malformed
+  content. `classify_business_activity(cik, sic, *, overrides, fiqh_params=FIQH_PARAMS)` is a pure
+  function (no DB, no cache, no dates, no network — confirmed by its signature and body): an override
+  present for `cik` wins outright in either direction (rescues a false positive when
+  `tier_override is None`, or flags a false negative when a tier is set); otherwise a Tier 0 SIC match
+  always fails, a Tier 0.5 match fails only if `fiqh_params.business_activity_tier_0_5_enabled.value`
+  is `True` (default `True`), and a Tier 1 match fails only if
+  `fiqh_params.business_activity_tier_1_enabled.value` is `True` (default `False`) — both toggles read
+  fresh from `fiqh_params` on every call, never cached.
+- **`mizan/screening/financial_ratios.py`** (194 lines) is pure arithmetic over already-resolved
+  plain `float`s — confirmed by direct read that no function in this file touches a DB connection,
+  cache directory, date, or network call. Four closed `frozenset[str]` allow-lists of XBRL tags:
+  `INTEREST_BEARING_DEBT_TAGS`, `INTEREST_BEARING_INVESTMENT_TAGS`, `NON_PERMISSIBLE_INCOME_TAGS`
+  (numerator-side; a company reporting under none of them contributes a legitimate `0.0`, not an
+  error), and `TOTAL_REVENUE_TAGS` (denominator-side for ratio 3; an empty result here is instead
+  `InsufficientDataError`, raised one level up in `verdict.py`). `compute_debt_ratio`,
+  `compute_interest_investments_ratio`, and `compute_non_permissible_income_ratio` each call a shared
+  private `_ratio_reason` helper that divides, compares with `<=` (a value exactly at the threshold
+  passes), and records a signed `margin` (positive = comfortable margin when passing, positive = how
+  far over when failing). `compute_financial_ratio_screen` runs all three and combines them —
+  `passed` iff all three pass.
+- **`mizan/screening/verdict.py`** (441 lines) is the only function body in `mizan/` permitted to
+  treat "most-recently-filed fact with `filed <= as_of_date`" as sufficient point-in-time resolution
+  (the Fork-1 simplification) — confirmed by direct read that every reference to `filed` inside
+  `mizan/screening/` (functional, not prose) lives inside this one file's private helpers
+  (`_resolve_total_assets_denominator`, `_resolve_market_cap_denominator`, `_resolve_denominator`,
+  `_resolve_tag_set_sum`), all reachable only from `screen()`, and that
+  `business_activity.py`/`financial_ratios.py` never reference `filed` as a field access anywhere
+  (a plain-text grep for the substring "filed" does surface two hits in `business_activity.py`, but
+  both are prose — "filed under" in a comment and "does not reference `filed`" in a docstring — not a
+  functional read, confirmed by reading both lines). `screen(ticker, as_of_date, *, con, cache_dir,
+  overrides=None, fiqh_params=FIQH_PARAMS)` resolves `cik`/`sic` from the cache only (no DuckDB touch
+  yet), runs `classify_business_activity`, and returns immediately with a one-entry reason trace and
+  `Verdict.NON_COMPLIANT` if Layer 1 fails — never opening a `fundamentals_facts`/`price_bars` query
+  for a Layer-1-failing ticker. If Layer 1 passes, it confirms the ticker was ever normalized at all
+  (`_ensure_normalized`, raising `NotNormalizedError` otherwise), resolves the two-axis denominator
+  (`_resolve_denominator`, dispatching on `fiqh_params.ratio_denominator_basis.value` between total
+  assets and market cap, and on `fiqh_params.ratio_denominator_smoothing.value` between spot and a
+  trailing-12-month average — using `raw_close`, never `adj_close`, for the market-cap axis), sums
+  every ratio numerator via `_resolve_tag_set_sum`, and combines both layers: `NON_COMPLIANT` if any
+  ratio fails, `PURE` if all three ratio `actual_value`s are exactly `0.0`, otherwise `MIXED`. The
+  result is wrapped in `ResultEnvelope(active_caveats=(Caveat.LOOK_AHEAD_BIAS,
+  Caveat.PENDING_SCHOLARLY_VERIFICATION), payload=screening_verdict.model_dump())` — never
+  `Caveat.SURVIVORSHIP_BIAS`, which the module's own docstring states is a universe-selection concern
+  for Phase 5, not something one `screen()` call can assert about itself. `screen()` imports
+  `classify_business_activity`/`resolve_sic_offline` and `compute_financial_ratio_screen` **locally**
+  inside its own body, not at module top level — confirmed by reading the function body — to break a
+  genuine two-way import dependency (`business_activity.py`/`financial_ratios.py` both need
+  `ReasonTraceEntry`/`ScreenName`, defined in `verdict.py`, to type their own result models).
+- **`mizan/cli/screen.py`** (119 lines) registers `screen --ticker TICKER [--ticker TICKER ...]
+  --as-of-date YYYY-MM-DD --db-path PATH --cache-dir PATH [--overrides-path PATH]`. `--overrides-path`
+  is the only optional flag, defaulting to `None` (no hidden default file). `run()` opens exactly one
+  read-only DuckDB connection (`db.connect(args.db_path, read_only=True)` — confirmed by direct read,
+  `screen` never writes to DuckDB), loads the override map once, then for each ticker calls `screen()`
+  and prints the verdict plus every reason-trace entry to stdout, catching
+  `CikResolutionError`/`SicResolutionError`/`NotNormalizedError`/`InsufficientDataError` per ticker
+  and printing a `HALT [{ticker}]: ...` line to stderr while continuing to the next ticker — returning
+  exit code 1 if any ticker halted, the same contract `mizan.cli.ingest.run`/`mizan.cli.normalize.run`
+  already established.
+- **`mizan/cli/main.py`** gained one new import and one new registration line
+  (`screen_cli.add_subparser(subparsers)`) — confirmed by reading the diff; `main()`'s boot-check-first
+  dispatch is otherwise unchanged, so `mizan screen` also halts before any screening logic runs if the
+  Phase 1 foundation is broken.
+- **`tests/fixtures/synthetic_universe.py`** (470 lines) defines 12 `SyntheticTicker` fixtures
+  (`ZZPURE01`, `ZZMIXED01`, `ZZNONCOMP_ACT01`, `ZZNONCOMP_RATIO01`, `ZZNONCOMP_RATIO02`,
+  `ZZTIER05_01`, `ZZTIER1_01`, `ZZOVERRIDE_RESCUE01`, `ZZOVERRIDE_FLAG01`, `ZZBOUNDARY01`,
+  `ZZLOOKAHEAD01`, `ZZNODATA01`, confirmed by counting `ALL_SYNTHETIC_TICKERS`), every one using a
+  CIK with the unmistakably-synthetic `999...` prefix and a module-top docstring stating explicitly
+  that none of them is a real issuer. `write_universe_cache`/`load_into_duckdb` materialize a given
+  fixture ticker's facts/price bars/SIC directly into a cache dir and DuckDB connection, bypassing
+  `normalize_edgar_facts`/`normalize_tiingo_bars` entirely since these rows already are the
+  pre-normalized shape `screen()` consumes.
+- `pyproject.toml` is **unmodified** by this phase — confirmed absent from the diff stat; Phase 4
+  adds zero new third-party dependencies (pure computation over `pydantic` schemas and already-open
+  `duckdb` connections).
+- `docs/modernization_log.md` gained two new dated (2026-08-30) entries this phase, both read in
+  full: §6.3 logs a live XBRL-concept-tag verification against real EDGAR `companyfacts` responses
+  for six real companies (13 of 14 candidate tags confirmed; `LongTermInvestments` could not be
+  confirmed against any of the six and is logged `[UNVERIFIED]`); §6.4 logs a live verification of
+  every `SIC_TIER_MAP` code against SEC's own published SIC code list plus a live EDGAR
+  company-search per code, and records that `PHASE_4_SPEC.md` §4.1's own illustrative "7993
+  (gambling)" example is not an SEC-assigned SIC code at all and was omitted rather than shipped (see
+  §3 below).
 
 ## 3. Decisions and tradeoffs
 
-**Carried forward from Phase 1 (still shipped, not overturned by Phase 2 or Phase 3):**
+**Carried forward from Phase 1 (still shipped, not overturned by any later phase):**
 
-- `FiqhParam` remains generic (`FiqhParam[T]`), not a `bool | float | str` union. Unaffected by
-  either later phase — `mizan/config/fiqh_params.py` is untouched.
+- `FiqhParam` remains generic (`FiqhParam[T]`), not a `bool | float | str` union. `mizan/config/`
+  remains untouched by Phase 4's diff.
 - `check_invariants()` / `check_fiqh_register()` remain hand-written, field-by-field checks rather
-  than a generic loop. Unaffected.
-- `StrEnum` (not `class X(str, Enum)`) remains the pattern for `VerificationStatus`, `Verdict`, and
-  `Caveat`. Unaffected.
+  than a generic loop.
+- `StrEnum` (not `class X(str, Enum)`) remains the pattern for every enum in the project, including
+  Phase 4's new `BusinessActivityTier`, `ClassificationSource`, and `ScreenName` — confirmed by direct
+  read of all three definitions.
 
-**Carried forward from Phase 2 (still shipped, not overturned by Phase 3):**
+**Carried forward from Phase 2/3 (still shipped, not overturned by Phase 4):**
 
-- `read_raw_json`'s return type remains the shipped `object`, not the spec's originally-stated
-  `dict[str, object]` — still correct, and still load-bearing for Phase 3: `normalize_edgar_facts`
-  narrows the EDGAR object with `isinstance(data, dict)` and `normalize_tiingo_bars` narrows the
-  Tiingo array with `isinstance(bars_raw, list)`, both confirmed by direct read of
-  `mizan/data/normalize.py` this pass — the same shared, honestly-typed reader Phase 2 built is
-  reused by Phase 3 without modification.
-- EDGAR's write-cache-before-validate ordering, and the `TIINGO_API_TOKEN` environment variable
-  name, are both unaffected by Phase 3 (neither file changed).
-- The two ruff-noqa corrections from Phase 2 (`A003` absent, `N812` present on the `_Date` alias in
-  `mizan/data/models.py`) still hold as-is in `models.py`; Phase 3 adds a related but distinct
-  finding of its own — see §5 below.
+- `read_raw_json`'s `object` return type remains load-bearing: `resolve_sic_offline`
+  (`mizan/screening/business_activity.py`) narrows it with `isinstance(raw, dict)` before reading
+  `sic`, the same pattern Phase 3's `normalize.py` already used for its own reads.
+- DuckDB's single-writer lock, the dedup-then-insert-with-backstop pattern, and the closed
+  `RECOGNIZED_XBRL_UNITS` allow-list are all unaffected — `mizan/data/db.py` and
+  `mizan/data/normalize.py` are both untouched by Phase 4's diff.
+- The Phase 2/3 `# noqa: N812` findings on the `_Date` alias in `mizan/data/models.py` and
+  `mizan/data/normalize.py` are unaffected; see §5 below for whether a third instance appears in
+  Phase 4's own new code.
 
 **New this phase — real decisions/resolutions, each verified directly against the code and
 `docs/modernization_log.md` this pass:**
 
-- **DuckDB's single-writer lock is enforced across OS processes, not within one process — the spec's
-  planned same-process test could not have exercised the real guarantee, and the build corrected
-  course rather than shipping a test that measured the wrong thing.** `PHASE_3_SPEC.md` §7 (guard
-  G-DB1) and §8 (AC10) both described the test as "a second connection attempt ... in the same
-  process." The shipped code and `docs/modernization_log.md`'s corrected §5.4 entry (both read this
-  pass) establish the actual, empirically-verified behaviour: DuckDB 1.5.5's Python API caches one
-  underlying database instance per file path *per process* — a second `db.connect()` call to the
-  same path from the same process shares that instance rather than hitting a lock error (proven by
-  `tests/test_data_db.py::test_second_same_process_connection_shares_the_instance_and_does_not_raise`,
-  which inserts via the second connection and reads the row back via the first). The real
-  single-writer file lock only fires when a second, genuinely separate OS process tries to open the
-  same file while the first holds it open non-read-only — exercised by
-  `tests/test_data_db.py::test_second_writable_connection_to_a_locked_file_raises_across_processes`,
-  which spawns a real `subprocess.Popen` holder and asserts the second process's `db.connect()` call
-  raises. **The tradeoff, stated plainly:** a same-process caller (e.g. two functions in one script
-  both calling `db.connect()` on the same path) cannot accidentally get locked out by DuckDB's own
-  design — convenient, and not a safety hole, because `mizan/cli/normalize.py`'s `run()` already
-  holds exactly one connection per invocation for its entire batch (verified this pass, §2 above).
-  The safety property that actually matters operationally — that two independent, concurrently-run
-  `mizan normalize` invocations (or a stray leftover process) cannot both write to the same DuckDB
-  file and corrupt it — is still real, still enforced by the OS-level lock, and is now tested against
-  the mechanism that actually provides it, rather than against a same-process scenario that would
-  have passed even if the real cross-process guard were silently broken.
-- **`pyarrow` is a genuine Phase 3 dependency, not merely dragged in by `duckdb`.** Verified directly
-  in `_bulk_load` (`mizan/data/normalize.py` line 363): `pyarrow.Table.from_pylist(payload)` builds
-  the Arrow table that is `register()`ed with DuckDB as the `_staging` view every bulk-load call
-  uses — the Arrow-interchange half of `pyarrow`'s role, not the Parquet half (Phase 3 writes no
-  Parquet file anywhere, confirmed by `grep -rn "to_parquet\|read_parquet" mizan/data/` returning no
-  hits this pass).
-- **The application-level pre-insert conflict check is the primary duplicate guard; the DuckDB
-  `PRIMARY KEY` constraint is a backstop, not the mechanism operators should expect to see fire in
-  normal operation.** `_bulk_load`'s own docstring (`mizan/data/normalize.py` lines 336–353) states
-  this explicitly, and it is structurally true: `_raise_on_conflict` runs and can raise
-  `DuplicateFactRowError`/`DuplicatePriceBarError` *before* any `INSERT` statement executes, so a
-  `duckdb.ConstraintException` surfacing from the `INSERT` itself would indicate a bug in the
-  pre-check, not a normal-path duplicate rejection. The tradeoff: this is two separate mechanisms
-  doing conceptually related work (both exist to prevent a silent duplicate), which is more code than
-  relying on the constraint alone — but the constraint alone cannot distinguish "genuine conflicting
-  value" from "byte-identical idempotent replay" (both would violate a naive `INSERT`), so the
-  pre-check's `WHERE NOT EXISTS`/differing-value split is load-bearing, not redundant.
-- **No ORM, no migration framework, no `sqlalchemy`.** `mizan/data/db.py` uses DuckDB's own
-  `connect`/`execute`/`register` API directly; `ensure_schema`'s idempotent
-  `CREATE TABLE IF NOT EXISTS` plus `_verify_columns`'s defensive column-set check is the entire
-  migration story for V1 (`PHASE_3_SPEC.md` §5.3's stated decision, matched verbatim by the shipped
-  code — no `ALTER TABLE`/`DROP TABLE` anywhere in `mizan/data/db.py`, confirmed by grep this pass).
-  The tradeoff: a genuine schema change during development requires deleting the gitignored,
-  derived `.duckdb` file and re-running `mizan normalize` from the still-intact raw JSON cache,
-  rather than an in-place migration — acceptable for a single-developer, single-schema-version, local
-  file, not acceptable if this ever became multi-developer or long-lived-production infrastructure.
-- **`normalize_edgar_facts` is scoped to `companyfacts` only, never `companyconcept`.** Verified: no
-  function in `mizan/data/normalize.py` reads a `companyconcept`-sourced cache entry.
-  `companyfacts` is a strict superset of any single `companyconcept` call for the same CIK, and
-  `mizan/cli/ingest.py`'s `run()` (Phase 2, untouched) never calls `ingest_edgar_companyconcept` —
-  so there is currently no cached `companyconcept` data for this function to be missing anyway. The
-  tradeoff is deferred, not paid: if a future phase needs the narrower `companyconcept` shape
-  normalized, that is an additive extension to this file, not a rework.
-- **`resolve_cik_offline` deliberately skips Phase 2's `resolve_cik`'s name-cross-check.** It performs
-  only the ticker→CIK lookup against the cached `company_tickers.json`, not the
-  submissions-record name/title cross-check `ingest_edgar.resolve_cik` also does. This is a
-  narrower, cache-only function built for one purpose (locating the right cache files for
-  `normalize`'s own read), not a re-run of Phase 2's own drift detection — the tradeoff being that
-  `mizan normalize` trusts the CIK Phase 2's `mizan ingest` already resolved and cross-checked for
-  that ticker, rather than re-verifying it a second time.
+- **The SIC-code omission finding: `PHASE_4_SPEC.md` §4.1's own illustrative "7993 (gambling)" entry
+  does not exist in the shipped `SIC_TIER_MAP`, and this is a documented finding, not an oversight.**
+  Verified live 2026-08-30 (`docs/modernization_log.md` §6.4, read in full this pass) that SIC 7993
+  is absent from SEC's own published SIC code list and that a live EDGAR company-search for
+  `SIC=7993` returns zero registrants — it was never a real, assigned SEC code, only a plausible-
+  looking number the spec's own illustrative table repeated without live verification. Two real
+  gambling/casino issuers checked instead (Wynn Resorts, CIK 0001174922; Caesars Entertainment, CIK
+  0001590895) both file under SIC 7011 (Hotels & Motels), which `SIC_TIER_MAP` already carries under
+  Tier 1. **The tradeoff, stated plainly:** `SIC_TIER_MAP` now has no dedicated Tier-0 gambling code
+  at all — a gambling-core-business issuer filed under 7011 is only caught when
+  `business_activity_tier_1_enabled` is turned on, or via a hand-researched override — which is a
+  real, documented granularity gap in an illustrative engineering constant. The alternative
+  (inventing a plausible-looking substitute SIC code that was itself never verified to exist) would
+  have been exactly the fabricated-precision failure mode this project's honesty discipline exists to
+  forbid; a documented gap is more honest than false completeness, and is logged as such rather than
+  silently patched over.
+- **`screen()`'s `overrides` parameter default changed from a live `BusinessActivityOverrideMap`
+  object (as `PHASE_4_SPEC.md` §4.3's own illustrative signature showed) to `overrides:
+  BusinessActivityOverrideMap | None = None`, resolved inside the function body — a lint-rule
+  correction, not a behavior change.** Confirmed by direct read of `mizan/screening/verdict.py` lines
+  318 and 368–370: `ruff`'s `B008` rule forbids a function call in an argument default (the spec's own
+  `BusinessActivityOverrideMap(overrides={})` default expression would trip it), so the shipped code
+  uses the `None`-sentinel pattern and resolves it to the identical empty map inside `screen()`'s own
+  body on every call. Since `BusinessActivityOverrideMap` is `frozen=True` and an empty map compared
+  to another empty map is never observably different, this is behaviorally identical to the spec's
+  illustrative default for every caller — purely a tooling-compliance fix, confirmed by reading the
+  module's own docstring explaining exactly this.
+- **`business_activity.py`, not `normalize.py`, resolves SIC — and this does not violate Phase 4's
+  "no new migrations" non-goal, because SIC is read from Phase 2's raw cache, never from DuckDB.**
+  Verified directly: Phase 3's two DuckDB tables (`fundamentals_facts`, `price_bars`,
+  `mizan/data/db.py`, untouched by this phase) carry no SIC column at all, and SIC lives only in the
+  already-cached `edgar/submissions/{cik}.json` file Phase 2's `ingest_edgar_submissions` wrote.
+  Resolving it therefore had exactly two options: add a third DuckDB table (which would be a schema
+  migration, explicitly forbidden by `PHASE_4_SPEC.md` §5 — "Phase 4 adds no DuckDB table, column, or
+  index"), or read the already-cached raw file directly, offline, the same pattern Phase 3's own
+  `resolve_cik_offline` already established for `company_tickers.json`. The shipped
+  `resolve_sic_offline` (`mizan/screening/business_activity.py` lines 233–257) does the latter — zero
+  network capability (no client/httpx parameter exists on its signature, confirmed by reading it), no
+  `filed`-based temporal resolution (SIC has no temporal dimension in this cache), and no DuckDB
+  touch. Since this reads a Phase-2-owned raw cache file that Phase 3 never touched or normalized
+  (`fundamentals_facts`/`price_bars` remain the only two tables Phase 3 built), it is not a
+  re-reading of Phase 3's scope — it is applying Phase 3's own established offline-cache-read
+  precedent to a data source Phase 3 correctly left alone, without adding any new migration or schema
+  surface anywhere.
 
 ## 4. Domain mechanics
 
-**Fiqh register — carried forward from Phase 1, unchanged (neither Phase 2 nor Phase 3 touches
-`mizan/config/fiqh_params.py`):**
+**Fiqh register — carried forward from Phase 1, unchanged (neither Phase 2, 3, nor 4 touches
+`mizan/config/fiqh_params.py`; confirmed by re-reading it this pass), now shown alongside exactly
+which Phase 4 code reads each entry:**
 
-| # | Figure / default | Value in code | Code's own source citation | Code's own honesty flag |
+| # | Figure / default | Value in code | Code's own source citation | Read by (Phase 4) |
 |---|---|---|---|---|
-| 1 | Ratio denominator basis | `market_cap` | AAOIFI SS21 public methodology (Merah presentation, Oct 2017) | **[UNVERIFIED / INFERENCE]** — denominator basis not stated in the public methodology |
-| 2 | Ratio denominator smoothing | `spot` (unsmoothed) | Same Merah presentation, by contrast with index-provider practice | **[UNVERIFIED / INFERENCE]** — averaging window not stated |
-| 3 | Debt-ratio threshold | 30% | "Merah presentation slides 32-34" | No gap flagged — verified verbatim against cited slides |
-| 4 | Interest-investments threshold | 30% | "Merah presentation slides 33-34" | No gap flagged |
-| 5 | Non-permissible income threshold | 5% | "Merah presentation slide 32," quoted "Non Halal Income Should not Exceed 5% of Total Income" | Denominator ambiguity flagged: source says "Total Income," `MASTER_PRD.md` §6.2 says "total revenue" |
-| 6 | Business-activity Tier 0.5 (adult content, weapons/defence) | enabled | Reaches AAOIFI only via its catch-all "unlawful activities" clause | Flagged **not directly AAOIFI-enumerated** |
-| 7 | Business-activity Tier 1 (media/music/entertainment, hotels) | disabled | "genuinely contested across scholarly bodies" | Flagged **not AAOIFI-enumerated** |
-| 8 | Grace period before forced divestment | 1 rebalance period | "common Islamic-fund practice" | Flagged **no AAOIFI-stated grace period found** |
-| 9 | Purify capital gains | disabled (dividends-only) | "Fork A" | Flagged: source requires purification but has no capital-gains formula |
-| 10 | Divestment-attribution method | time-bounded price appreciation over flip-to-divestment window | "Fork C" | Flagged: **no settled formula exists** |
-| 11 | Purification accounting | side-ledger, never netted into NAV | Primary-source verbatim quote (donate to charity, excluded from investor P&L) | No gap flagged |
+| 1 | Ratio denominator basis | `market_cap` | AAOIFI SS21 public methodology (Merah presentation, Oct 2017) — **[UNVERIFIED / INFERENCE]**, basis not stated in the public methodology | `FiqhParams.ratio_denominator_basis`, `mizan/screening/verdict.py`'s `_resolve_denominator` |
+| 2 | Ratio denominator smoothing | `spot` (unsmoothed) | Same Merah presentation, by contrast with index-provider practice — **[UNVERIFIED / INFERENCE]** | `FiqhParams.ratio_denominator_smoothing`, same function |
+| 3 | Debt-ratio threshold | 30% | "Merah presentation slides 32-34," verified verbatim | `FiqhParams.debt_ratio_threshold`, `compute_debt_ratio` |
+| 4 | Interest-investments threshold | 30% | "Merah presentation slides 33-34," verified verbatim | `FiqhParams.interest_investments_threshold`, `compute_interest_investments_ratio` |
+| 5 | Non-permissible income threshold | 5% | "Merah presentation slide 32," quoted "Non Halal Income Should not Exceed 5% of Total Income" — denominator ambiguity flagged (source says "Income," `MASTER_PRD.md` §6.2 says "revenue") | `FiqhParams.non_permissible_income_threshold`, `compute_non_permissible_income_ratio` — Phase 4 concretely picks the "total revenue" reading to compute with (`TOTAL_REVENUE_TAGS`'s own docstring), which does NOT resolve `ULTIMATE_PRD.md` Q2, only makes a transparent, cited pick so the code can run |
+| 6 | Business-activity Tier 0.5 (adult content, weapons/defence) | enabled (default `True`) | Reaches AAOIFI only via its catch-all "unlawful activities" clause | `FiqhParams.business_activity_tier_0_5_enabled`, `classify_business_activity` |
+| 7 | Business-activity Tier 1 (media/music/entertainment, hotels) | disabled (default `False`) | "genuinely contested across scholarly bodies" | `FiqhParams.business_activity_tier_1_enabled`, `classify_business_activity` |
+| 8–11 | Grace period, capital-gains purification, divestment attribution, purification accounting | unchanged | unchanged | Not read anywhere in Phase 4 — these are Phase 5/6 concerns (`screen()` produces only a Verdict, no purification amount) |
 
-The seven `Invariants` fields (`mizan/config/invariants.py`) remain settled boundary conditions, not
-judgment calls — `cash_yield = 0.0` still encodes that idle cash may never earn interest (riba),
-sourced to `MASTER_PRD.md` §2 and `ULTIMATE_PRD.md` §5.
+**New this phase — the tiered business-activity screen (`MASTER_PRD.md` §6.1's three tiers,
+implemented in `mizan/screening/business_activity.py`'s `SIC_TIER_MAP`), every SIC code verified
+live 2026-08-30 against SEC's own published SIC code list and cross-checked for at least one real
+registered filer (`docs/modernization_log.md` §6.4):**
 
-**Ingestion domain mechanics — carried forward from Phase 2, unchanged (neither `ingest_edgar.py`
-nor `ingest_tiingo.py` is touched by Phase 3's diff):**
-
-| Figure | Value | Code enforcing it | Citation |
+| Tier | AAOIFI basis (`MASTER_PRD.md` §6.1) | Real SIC codes shipped in `SIC_TIER_MAP` | Gate |
 |---|---|---|---|
-| SEC EDGAR rate limit | 10 requests/second per IP; Mizan spaces at ≥0.12s | `_EdgarRateLimiter.wait_for_slot`, `mizan/data/ingest_edgar.py` | `docs/modernization_log.md` §6.1 |
-| SEC EDGAR block cooldown | ≥600s (10 min) wait, floored even if `Retry-After` is shorter, before one retry; a second consecutive block halts | `_EdgarRateLimiter.note_block`, `_edgar_get` | Same §6.1 |
-| SEC EDGAR User-Agent requirement | Descriptive `User-Agent` + real contact email required; a bare/missing UA gets HTTP 403 | `_edgar_headers` | Same §6.1 |
-| CIK zero-padding + name cross-check | `cik_str` zero-padded to 10 digits; resolved CIK's submissions `name` cross-checked against `company_tickers.json`'s `title` | `resolve_cik`, `_names_match`, `mizan/data/ingest_edgar.py` | `PHASE_2_SPEC.md` §6.3 |
-| Tiingo request budget | 50 requests/hour, 1,000 requests/day — throttled, never raised on its own | `_TiingoBudget.consume`, `mizan/data/ingest_tiingo.py` | `docs/modernization_log.md` §6.2 |
-| Tiingo unique-symbol budget | 500 unique tickers/calendar month — a 501st distinct ticker raises `TiingoUniverseDriftError` | `_register_symbol_or_raise` | Same §6.2 |
-| Corporate-action anomaly heuristic | A bar with `splitFactor != 1.0` and `divCash == 0.0` on the same date is flagged | `_scan_for_corporate_action_anomalies` | `PHASE_2_SPEC.md` §6.4 |
-| Adjusted vs raw close never conflated (raw ingestion layer) | `TiingoEodBar.close` and `.adjClose` are two independently required fields | `mizan/data/models.py` | `PHASE_2_SPEC.md` §7 guard G-T3 |
+| Tier 0 | AAOIFI-explicit (SS21 industry screen): conventional finance, insurance, alcohol, non-halal food, tobacco | `2000`, `2011`, `2013` (food/meat), `2080`, `2082` (beverages/alcohol), `2100`, `2111` (tobacco), `6021`, `6022`, `6029`, `6035`, `6036` (commercial/savings banks), `6311`, `6321`, `6324`, `6331`, `6351`, `6361`, `6399`, `6411` (insurance) | Always fails — never gated by any `fiqh_params` toggle |
+| Tier 0.5 | AAOIFI catch-all "any unlawful activity," not SS21-enumerated | `2741`, `2750` (adult-content-adjacent publishing/printing), `3480`, `3760` (ordnance/guided missiles — weapons) | Fails only if `business_activity_tier_0_5_enabled.value is True` (default `True`) |
+| Tier 1 | Genuinely contested across scholarly bodies | `7812`, `7822` (motion picture), `7011` (hotels — also the SIC real gambling/casino issuers file under, per the omission finding in §3) | Fails only if `business_activity_tier_1_enabled.value is True` (default `False`) |
 
-**New this phase — normalization/storage domain mechanics, every figure cross-checked against
-`docs/modernization_log.md` (live-verified 2026-08-30) and the shipped code:**
+**New this phase — the AAOIFI 30/30/5 financial-ratio screen (`MASTER_PRD.md` §6.2, implemented in
+`mizan/screening/financial_ratios.py` + `verdict.py`'s denominator resolution), every threshold and
+axis read from `FIQH_PARAMS` at call time, never hardcoded:**
 
-| Figure | Value | Code enforcing it | Citation |
-|---|---|---|---|
-| `fundamentals_facts` uniqueness key | `(cik, taxonomy, tag, unit, period_start, period_end, accn)` — `taxonomy`+`tag` together are the XBRL "concept" (e.g. `us-gaap:Revenues`), `unit` is a necessary fourth axis (the same concept can appear under two units), `accn` (not `filed`) is the discriminator for "same period reported in two filings" | DDL `PRIMARY KEY` in `_CREATE_FUNDAMENTALS_FACTS`, `mizan/data/db.py`; dedup key in `_FUNDAMENTALS_FACTS_KEY_COLUMNS`, `mizan/data/normalize.py` | `PHASE_1_SPEC.md` §5's forward declaration; `PHASE_3_SPEC.md` §5; addresses `ULTIMATE_PRD.md` §4.3's named failure mode "Duplicate/overlapping filing periods loaded twice into DuckDB," categorized **HALT-for-human** there |
-| `price_bars` uniqueness key | `(ticker, trade_date)` | DDL `PRIMARY KEY` in `_CREATE_PRICE_BARS`; `_PRICE_BARS_KEY_COLUMNS` | `PHASE_3_SPEC.md` §5.2 |
-| XBRL units validation | Closed allow-list `RECOGNIZED_XBRL_UNITS = frozenset({"USD", "shares"})`; any other unit key (e.g. `"USD/shares"`) raises `UnrecognizedUnitError` before any row for that unit is constructed — never a guessed scale conversion | `normalize_edgar_facts`, `mizan/data/normalize.py` lines 219–224 | `ULTIMATE_PRD.md` §4.3's named failure mode "Silent type coercion (an XBRL fact reported in different unit scales across filings)," categorized **HALT-for-human**; addressed by rejecting rather than guessing |
-| Instantaneous-concept substitution | A raw fact with `start=None` is normalized to `period_start = period_end` with `is_instantaneous = True`, losslessly preserving the original signal in a form with no nullable key column | `_build_fact_row`, `mizan/data/normalize.py` lines 243–269 | `PHASE_3_SPEC.md` §3, §7 guard G-N6 |
-| Dedup-then-insert-with-backstop pattern | Pre-insert conflict check raises on a genuine value conflict at an existing key; `INSERT ... WHERE NOT EXISTS` silently skips a byte-identical replay; the table's own `PRIMARY KEY` is the last-resort backstop | `_bulk_load`, `_raise_on_conflict`, `mizan/data/normalize.py` | `PHASE_3_SPEC.md` §6.2 |
-| DuckDB PRIMARY KEY constraint-violation behaviour | `INSERT`ing a second row with an identical PK and differing non-key values raises `duckdb.ConstraintException` | Verified live against DuckDB 1.5.5 in `.venv`; `tests/test_data_db.py::test_fundamentals_facts_primary_key_rejects_a_duplicate_key_insert` and the `price_bars` equivalent | `docs/modernization_log.md` §5.4 (dated 2026-08-30 build-time verification) |
-| Single-writer file lock scope | Enforced by the OS across processes, not by a second same-process `duckdb.connect()` call (see §3 above) | `tests/test_data_db.py`'s two lock-behaviour tests | `docs/modernization_log.md` §5.4 correction |
+| Ratio | Numerator (summed-as-available XBRL tags) | Denominator | Threshold (`FIQH_PARAMS` entry) | Comparison |
+|---|---|---|---|---|
+| 1. Debt ratio | `INTEREST_BEARING_DEBT_TAGS` = `{LongTermDebtNoncurrent, LongTermDebtCurrent, ShortTermBorrowings, DebtCurrent}` | the two-axis denominator (below) | `debt_ratio_threshold` (30%) | `<=` |
+| 2. Interest/investments ratio | `INTEREST_BEARING_INVESTMENT_TAGS` = `{ShortTermInvestments, LongTermInvestments, MarketableSecuritiesCurrent}` | same two-axis denominator | `interest_investments_threshold` (30%) | `<=` |
+| 3. Non-permissible income ratio | `NON_PERMISSIBLE_INCOME_TAGS` = `{InvestmentIncomeInterest, InterestIncomeOther, InterestAndDividendIncomeOperating}` — a documented, sourced proxy for "non-halal income," not a settled AAOIFI-named line item | `TOTAL_REVENUE_TAGS` = `{Revenues, RevenueFromContractWithCustomerExcludingAssessedTax}`, always — never the two-axis choice | `non_permissible_income_threshold` (5%) | `<=` |
 
-None of these Phase 3 figures are marked `[UNVERIFIED]` — all are drawn from
-`docs/modernization_log.md`'s own record of a live/documentation re-check performed 2026-08-30,
-independently re-run this pass (the DuckDB PK-violation test and the two lock-behaviour tests were
-executed as part of the `pytest` run in §5, not merely read).
+**The two-axis denominator** (`_resolve_denominator`, `mizan/screening/verdict.py`): Axis A —
+`ratio_denominator_basis` — `TOTAL_ASSETS` (sum of `us-gaap:Assets`, unit USD, instantaneous) vs.
+`MARKET_CAP` (default; `dei:EntityCommonStockSharesOutstanding` × `price_bars.raw_close`, never
+`adj_close`). Axis B — `ratio_denominator_smoothing` — `SPOT` (default; single most-recently-filed
+value) vs. `AVERAGED` (mean of one value per distinct `period_end`/`trade_date` within the trailing
+12 months of `as_of_date`). All four `<=` comparisons use AAOIFI's own verbatim "should not EXCEED"
+wording (a value exactly at the threshold passes) per `docs/modernization_log.md` §7's citation of
+the Merah presentation (slides 32–34) — the exact phrase "should not EXCEED" appears in that source
+document as quoted in this project's own register entry #5 above, not as a separate literal
+sentence in `docs/modernization_log.md` §7's own summary table, which instead states "30% / 30%
+thresholds ... verified (slides 32–34)"; both point to the same primary source and the same
+verified figures, so this is a citation-precision note, not a discrepancy.
+
+**Ingestion and normalization domain mechanics — carried forward from Phase 2/3, unchanged (neither
+`ingest_edgar.py`, `ingest_tiingo.py`, `db.py`, nor `normalize.py` is touched by Phase 4's diff):**
+SEC EDGAR's 10 req/s rate limit and ≥600s block cooldown, Tiingo's 50/hour–1,000/day request budget
+and 500-ticker/month unique-symbol cap, the corporate-action anomaly heuristic, the
+`fundamentals_facts`/`price_bars` uniqueness keys, and the closed `RECOGNIZED_XBRL_UNITS` allow-list
+all remain exactly as the Phase 3 comprehension pass described and verified — not re-verified again
+in full this pass since the owning code is unchanged, but re-confirmed present and untouched via
+`git diff e9a62c3..0060cfd --stat`.
 
 ## 5. Honesty audit
 
-Ran the same class of verification `PHASE_3_SPEC.md` §8 (acceptance criteria) and §7 (guards)
+Ran the same class of verification `PHASE_4_SPEC.md` §8 (acceptance criteria) and §7 (guards)
 specify, against the code as it exists in the repository right now, this run — not trusting the
-spec's or the approval commit's claim that they pass.
+spec's or the approval commit's claim that they pass. No adversarial re-review was performed (Phase
+4 is already approved); this is a comprehension-grade honesty pass.
 
 **Everything below passed as claimed, verified this run, inside the project's `.venv`:**
-- `pytest tests/` — **178 passed** (146 carried from Phase 1+2 + 32 new this phase across the three
-  new test files: 10 in `test_data_db.py`, 14 in `test_data_normalize.py`, 8 in
-  `test_cli_normalize.py`), no regressions.
+- `pytest tests/` — **259 passed** (178 carried from Phase 1+2+3 + 81 new this phase across the four
+  new test files plus the synthetic fixture module), no regressions.
 - `ruff check mizan tests` — "All checks passed!", exit 0, under the pinned `ruff==0.16.5`.
-- `mypy --strict mizan tests` — clean, "Success: no issues found in 32 source files," inside
-  `.venv`.
-- Boundary greps re-run this pass over the expanded tree: `grep -rn "httpx" mizan/data/normalize.py
-  mizan/data/db.py mizan/cli/normalize.py` — no hits (G-N8 clean). `grep -rnE
-  "^\s*(import|from)\s+(duckdb|pyarrow)" mizan/` — every hit is inside `mizan/data/db.py` or
-  `mizan/data/normalize.py`, none elsewhere (G-DEP3 clean). `grep -rnE
-  "^\s*(import|from)\s+(pandas|matplotlib)" mizan/` — zero hits anywhere (no premature import).
-  `grep -rn "to_parquet\|read_parquet" mizan/data/` and `grep -rn "ALTER TABLE\|DROP TABLE"
-  mizan/data/db.py` — zero hits (no Parquet, no schema alteration, §5.3/§9's stated V1 scope
-  honored). `grep -n "RECOGNIZED_XBRL_UNITS" mizan/data/normalize.py` — one definition, used at
-  every check site, no second ad-hoc unit check anywhere else.
-- `.gitignore` reconciliation, verified live rather than just read: created a real, throwaway
-  `.duckdb` file at the repo root via `mizan.data.db.connect()` this pass and confirmed
-  `git check-ignore -v` reports it matched by `.gitignore:10:*.duckdb`; the file was then deleted.
-  `git log --format=%B` across both Phase 3 commits (`8483b5b` docs, `8e99809` implementation,
-  `e9a62c3` approval) — no `Co-Authored-By`, no "Generated with," no model/assistant name.
-- `duckdb==1.5.5` and `pyarrow==25.0.1` reconcile identically between `pyproject.toml` and
-  `docs/modernization_log.md`, with a fresh, dated 2026-08-30 re-check logged (actual
-  `pip index versions` output pasted into the log, not silently carried forward from the Step 10
-  entry) — AC20 holds.
+- `mypy --strict mizan tests` — "Success: no issues found in 43 source files" (up from 32 in the
+  Phase 3 pass — 11 new files: 4 `mizan/screening/` modules, `mizan/cli/screen.py`,
+  `tests/fixtures/__init__.py`, `tests/fixtures/synthetic_universe.py`, and 4 new test files),
+  inside `.venv`.
+- Boundary greps re-run this pass over the full tree including `mizan/screening/` and
+  `mizan/cli/screen.py`: `grep -rniE "openai|anthropic|gemini|vertex|langchain|\bllm\b|
+  chat_completion|completion\(" mizan/screening/` — zero hits (G-S1/G-LLM4 clean). `grep -rn
+  "duckdb\|httpx\|cache_dir" mizan/screening/business_activity.py mizan/screening/financial_ratios.py`
+  — the only hits are `resolve_sic_offline`'s own declared `cache_dir` parameter (G-S7 clean). `grep
+  -rn "httpx" mizan/screening/` — zero hits anywhere (G-S8 clean). `grep -rniE "INSERT INTO|CREATE
+  TABLE|ALTER TABLE" mizan/screening/` — zero hits (G-DB3 clean). `grep -rn "BaseModel"
+  mizan/screening/ mizan/cli/screen.py` — every hit is `MizanBaseModel` or its import, no direct
+  `pydantic.BaseModel` subclass anywhere. `grep -rnE "^\s*(import|from)\s+(pandas|matplotlib)"
+  mizan/` — zero hits anywhere (no premature import). `git log --format=%B a95af9b..0060cfd` — no
+  `Co-Authored-By`, no "Generated with," no model/assistant name (G-AI clean).
+- **The `filed`-confinement guard (G-S2) holds, verified precisely, not just by a raw grep count.** A
+  plain-text `grep -rl "filed" mizan/screening/` surfaces both `verdict.py` (expected — this is the
+  one file permitted to reference it) and `business_activity.py`. Reading the two matching lines in
+  `business_activity.py` directly confirms both are prose, not a field access: a comment ("...issuer
+  filed under...") and a docstring sentence ("Does not reference `filed` at all..."). No function
+  body outside `mizan/screening/verdict.py` performs a `filed`-keyed query or comparison anywhere in
+  `mizan/screening/`.
+- `pyproject.toml` — confirmed byte-for-byte unmodified by this phase's diff (absent from `git diff
+  e9a62c3..0060cfd --stat`); zero new dependencies, matching `PHASE_4_SPEC.md` §2.1's stated decision.
 
-**Phase 1's documented mypy/numpy gap — re-tested this run, and now compounded by a second,
-related-but-distinct cause:**
+**Phase 1's documented mypy/numpy environment gap, and Phase 3's related duckdb-import gap — both
+re-tested this run, both still real, the duckdb gap now touching more files:**
 
-Phase 1's comprehension pass found that `mypy --strict mizan tests` fails outside `.venv` because a
-global, non-Mizan `numpy` install's type stubs use post-3.11 stub syntax the project's pinned
-`python_version = "3.11"` mypy target can't parse. This run:
-- **Inside `.venv`**: clean, 0 errors, 32 files (up from 26 in the Phase 2 pass — six new source
-  files: `mizan/data/db.py`, `mizan/data/normalize.py`, `mizan/cli/normalize.py`, and their three
-  test files).
-- **Outside `.venv`** (`py -3.14 -m mypy --strict mizan tests`): the original numpy failure still
-  reproduces verbatim (`numpy/__init__.pyi:737: error: Type statement is only supported in Python
-  3.12 and greater`) — confirmed still real, still environment-specific, not something Phase 3
-  fixed or worsened in isolation. **New this run:** outside `.venv`, mypy now *also* reports
-  `Cannot find implementation or library stub for module named "duckdb"` at every one of the four
-  files that import it (`mizan/data/db.py`, `mizan/data/normalize.py`,
-  `tests/test_data_db.py`, `tests/test_data_normalize.py`) — because `duckdb` (a native-extension
-  package) is naturally only installed inside `.venv`, not globally. This is not a new *bug*; it is
-  the expected, correct consequence of Phase 3 adding a real third-party runtime dependency, and it
-  makes `PHASE_3_SPEC.md` AC14's explicit instruction — "Building and verifying inside the project's
-  `.venv` ... is required, not merely encouraged, now that this phase adds a second real third-party
-  runtime dependency with native extension components" — concretely true rather than a hypothetical
-  caution: outside `.venv`, verification does not merely hit the pre-existing numpy-stub false
-  failure, it now cannot even import the modules under test.
+- **Inside `.venv`**: clean, 0 errors, 43 files.
+- **Outside `.venv`** (`py -3.14 -m mypy --strict mizan tests`): the original numpy stub failure
+  still reproduces verbatim (`numpy/__init__.pyi:737: error: Type statement is only supported in
+  Python 3.12 and greater`). The duckdb-import gap Phase 3's comprehension pass first found now
+  spans two more files this phase adds: `mizan/screening/verdict.py` and
+  `tests/test_screening_verdict.py` both import `duckdb` for type annotations
+  (`duckdb.DuckDBPyConnection`) and both now report `Cannot find implementation or library stub for
+  module named "duckdb"` outside `.venv`, alongside the four files Phase 3 already affected and
+  `tests/fixtures/synthetic_universe.py` (which also imports `duckdb` under `TYPE_CHECKING`). This is
+  not a new bug Phase 4 introduces — it is the same environment-specific, already-flagged limitation
+  simply reaching one more consumer of `duckdb`'s type, and `PHASE_3_SPEC.md`/`PHASE_4_SPEC.md`'s own
+  "build and verify inside `.venv`" instruction remains the correct, already-documented mitigation.
 
-**Two concrete, real spec-vs-code / honesty-surface findings from this pass:**
+**Phase 2's AC15 noqa-enumeration finding — re-checked this run, unchanged, no third file added:**
 
-1. **Phase 2's AC15 noqa-enumeration finding is unchanged in `mizan/data/models.py` itself, but the
-   repository's current honest state has moved: a second file now carries a `# noqa: N812`
-   suppression for the identical reason.** `PHASE_2_SPEC.md` §8 AC15 stated ruff's suppressions in
-   the *Phase-2* tree should be confined to `mizan/data/models.py` alone; Phase 2's own
-   comprehension pass already flagged that `models.py` in fact lacks the `A003` suppression AC15's
-   literal wording named (unaffected, unresolved, and out of Phase 3's scope to fix — `models.py` is
-   untouched by Phase 3's diff). Separately, and newly this run: `mizan/data/normalize.py` line 17
-   carries `from datetime import date as _Date  # noqa: N812`, the exact same alias pattern and the
-   exact same real reason `models.py` line 25 already carries one (ruff's `N812` does fire on this
-   alias under the pinned `ruff==0.16.5`, empirically, not by assumption). `PHASE_3_SPEC.md` itself
-   does not restate AC15's file-enumeration claim, so this is not a violation of any Phase 3
-   acceptance criterion — Phase 3's own AC15 asks only that `ruff check mizan tests` exit 0, which it
-   does, with zero `RUF100` ("unused noqa") findings, confirmed this run. It is noted here because a
-   reader relying on Phase 2's comprehension pass's literal claim ("models.py is still the only file
-   with any noqa in the new tree") would now be reading a claim that no longer describes the
-   repository: as of this pass, two files carry a noqa suppression, both legitimately, both for the
-   same rule.
-2. **No new gap Phase 3 itself introduces beyond the above.** Every `PHASE_3_SPEC.md` §5's
-   "build-time verification item" (the PRIMARY KEY constraint-violation behaviour) and every §2.1
-   "action item" (the live dependency-pin re-check) that the spec explicitly required as a mechanical,
-   non-assumed action was in fact performed and logged in `docs/modernization_log.md`, confirmed by
-   reading that file's actual new content this pass rather than trusting the spec's instruction that
-   it *should* be done.
+`grep -rn "noqa" mizan/` this pass finds exactly the same two suppressions Phase 3's comprehension
+pass already found (`mizan/data/models.py` and `mizan/data/normalize.py`, both `# noqa: N812` on a
+`_Date` alias) — Phase 4's new code introduces **no** third `noqa` suppression anywhere; `ruff check
+mizan tests` remains clean with zero `RUF100` ("unused noqa") findings. The Phase 2 AC15
+file-enumeration mismatch itself (the spec's literal wording named only `models.py`) remains present
+and unaffected — it is `models.py`'s own long-standing, out-of-scope-for-this-phase finding, not
+something Phase 4 could have fixed or worsened.
+
+**A concrete, real spec-vs-code finding new to this phase, run down to ground rather than restated
+from the review's own verdict:**
+
+The `screen()` signature actually shipped (`overrides: BusinessActivityOverrideMap | None = None`)
+differs textually from `PHASE_4_SPEC.md` §4.3's own illustrative code block (`overrides:
+BusinessActivityOverrideMap = BusinessActivityOverrideMap(overrides={})`). This is not a silent,
+unexplained drift: `mizan/screening/verdict.py`'s own docstring (lines 331–335) states the reason
+(`ruff`'s `B008` forbids a function call in an argument default) and asserts the behavior is
+identical for every caller. Verified this run: `ruff check mizan tests` is in fact clean, and
+`BusinessActivityOverrideMap(overrides={})` — constructed either as the spec's literal default or as
+the shipped `None`-then-resolve pattern — is a frozen, `extra="forbid"` Pydantic model whose only
+field is an empty dict either way, so there is no behavioral divergence, only a mechanical,
+correctly-explained deviation from the spec's own illustrative (not normative) code. See §3 above.
+
+**No new gap this pass otherwise found beyond what §3 above already surfaces as a deliberate,
+logged decision** (the SIC 7993 omission) rather than a silent one.
 
 ## 6. Open items
 
+**The single most important NEW open item this phase, stated prominently because it is the largest
+gap between "the pipeline runs" and "the pipeline produces a trustworthy real-world screening
+result":**
+
+- **The real ~100-ticker curated universe and its hand-verified business-activity override map still
+  do not exist anywhere in this repository.** Phase 4 built the generic, configurable screening
+  MECHANISM — `SIC_TIER_MAP` (a small, closed, publicly-sourced engineering constant) plus
+  `BusinessActivityOverrideMap` (a pluggable map that ships completely empty) — verified only against
+  ~12 explicitly-synthetic fixture tickers (`ZZPURE01`, etc., never real issuers). It did **not**
+  build, and was never supposed to build, the real hand-researched activity map `MASTER_PRD.md` §6.1
+  calls the honest V1 implementation for an actual usable universe. That hand-research — reading real
+  10-Ks, real business-segment disclosures, real conglomerate structures for ~100 real tickers — is
+  explicitly the project owner's own future work (`PHASE_4_SPEC.md` §9's first, most prominent
+  non-goal), not a code task any later automated phase should attempt to fabricate. Until that
+  research is supplied (via a real `--overrides-path` JSON file, in the documented format), `mizan
+  screen` run against a real ticker produces only a generic SIC-first-pass result — not a
+  trustworthy, hand-verified real-world compliance answer for that company.
+
 **Carried forward, status re-checked this pass:**
 
-- **The mypy/tests-numpy interaction, re-confirmed above, now with a related second symptom
-  outside `.venv`** — still open, still environment-specific, still not phase-blocking (Phase 3
-  passes `mypy --strict mizan tests` fully clean inside `.venv`). Unresolved at the CI/tooling
-  level; worth fixing by always invoking mypy inside `.venv` in any future automation, which is now
-  a harder requirement than before (see §5) since `duckdb` itself cannot even be imported outside it.
+- **The mypy/numpy-outside-.venv gap, and the now-larger duckdb-import gap it travels with** — still
+  open, still environment-specific, still not phase-blocking (Phase 4 passes `mypy --strict mizan
+  tests` fully clean inside `.venv`, 43 files). See §5.
 - **The three escalated fiqh open questions (Q1, Q2, Q3 in `ULTIMATE_PRD.md`)** — still open by
-  design; Phase 3 is normalization only and makes no attempt to resolve them (`PHASE_3_SPEC.md` §9).
+  design. Phase 4's own `TOTAL_REVENUE_TAGS` docstring states explicitly that picking "total revenue"
+  to compute with does **not** resolve Q2 (Total Income vs. total revenue) — it remains escalated,
+  unchanged, exactly as every prior phase's comprehension pass carried it forward.
 - **All eleven fiqh register entries remain `PENDING_SCHOLARLY_VERIFICATION`** — unchanged; nothing
-  in Phase 3 touches `mizan/config/fiqh_params.py`.
+  in Phase 4 touches `mizan/config/fiqh_params.py`.
 - **The Phase 2 AC15 noqa-enumeration mismatch (`A003` absent from `mizan/data/models.py`)** — still
-  present, unaffected by Phase 3 (that file is untouched); now joined by the related second-file
-  finding in §5 above.
+  present, unaffected by Phase 4 (that file is untouched).
 - **Corporate-action anomaly scan is deliberately conservative and will produce false positives** —
-  unchanged from Phase 2's own carried-forward note; still true, still an accepted tradeoff, not a
-  defect.
-- **No real backfill has been run** — unchanged from Phase 2's own carried-forward note. Everything
-  verified in Phase 2 and Phase 3 (and their own reviews) is against fixtures and mocked transports,
-  not a full live ~100-ticker × ~10-year run.
+  unchanged, still an accepted tradeoff, not a defect.
+- **No real backfill has been run** — unchanged. Everything verified in Phases 1–4 (and their own
+  reviews) is against fixtures and mocked transports/synthetic data, not a full live ~100-ticker ×
+  ~10-year run, and not a real screening result for any actual company.
+- **The DuckDB file remains a local, derived, regenerable artifact with no versioned migration
+  path** — unchanged from Phase 3's own carried-forward note; Phase 4 adds no migration either (§5 of
+  `PHASE_4_SPEC.md`, confirmed: no new table/column/index anywhere under `mizan/screening/`).
 
-**Resolved this phase:**
+**Other new Phase 4 open items:**
 
-- **"`mizan/data/normalize.py` does not exist yet"** — Phase 2's comprehension pass flagged this as
-  a known, intentional, spec-declared sequencing gap, not a defect. It is now resolved: the module
-  exists, is imported by `mizan/cli/normalize.py`, and is covered by 14 tests, all passing this run.
-
-**New this phase:**
-
-- **`fundamentals_facts` and `price_bars` are queryable but nothing reads them yet.** Phase 3 ships
-  the typed store; Phase 4's screening layer (`mizan/screening/business_activity.py`,
-  `financial_ratios.py`) is the first consumer, per `MASTER_PRD.md` §9.4 and `PHASE_3_SPEC.md` §9.
-  Worth knowing before assuming any screening/backtest behaviour exists — it does not yet.
-- **The DuckDB file is a local, derived, regenerable artifact with no versioned migration path by
-  deliberate V1 design decision (§3 above).** A future schema change requires deleting the
-  gitignored `.duckdb` file and re-running `mizan normalize` from the still-intact raw JSON cache,
-  not an in-place `ALTER TABLE`. Operationally fine for a single-developer local tool; would need
-  revisiting before this became multi-developer or long-lived shared infrastructure.
-- **`normalize_edgar_facts` only ever normalizes `companyfacts`-sourced cache entries, never
-  `companyconcept`.** No cached `companyconcept` data currently exists for it to be missing anyway
-  (`mizan/cli/ingest.py` never fetches it), but a future phase needing that narrower shape normalized
-  would require an additive extension to `mizan/data/normalize.py`, not something already covered.
-- **No real normalization run against a real, operator-backfilled cache has happened yet** — same
-  posture as Phase 2's own deferred real-ingestion-backfill item (`PHASE_3_SPEC.md` §9): normalizing
-  the actual ~100-ticker universe, once an operator runs a real backfill with a real
-  `TIINGO_API_TOKEN`, is a one-time operator action still pending, not something this phase's
-  automated tests exercised.
+- **`LongTermInvestments` (one of `INTEREST_BEARING_INVESTMENT_TAGS`'s three candidate tags) could
+  not be confirmed live against any of the six real companies checked this phase** (Apple, JPMorgan,
+  Travelers, NIKE, Caterpillar, Progressive) — logged `[UNVERIFIED]` in `docs/modernization_log.md`
+  §6.3 rather than silently assumed. It remains a standard, taxonomically valid `us-gaap` concept
+  name; its live presence in a real filing is simply unconfirmed by this phase's own verification
+  pass. Worth a real company's `companyfacts` response actually reporting it being checked before
+  this tag is trusted without caveat.
+- **The `SIC_TIER_MAP` has no dedicated Tier-0 code for gambling/casino issuers** (the SIC-7993
+  omission finding, §3 above) — a real gambling-core-business issuer filed under the real SIC 7011
+  (hotels) is only caught if `business_activity_tier_1_enabled` is turned on, or via a hand-researched
+  override. This is a known, documented granularity limitation of the generic SIC-first-pass
+  mechanism, not a silently-dropped requirement, but it means the default configuration
+  (`business_activity_tier_1_enabled=False`) will NOT catch a real-world casino operator on SIC alone.
+- **Nothing yet consumes `screen()`'s output over time or across a universe.** `screen()` produces a
+  single verdict for one ticker at one `as_of_date` — it does not track state, does not know about
+  holdings, and does not decide when a previously-compliant ticker's flip should trigger divestment.
+  That is explicitly Phase 5's `compliance_state.py`/backtest engine, unread by Phase 4.
 
 ---
 
@@ -591,3 +642,40 @@ same real reason `models.py` already carries one), and `mypy --strict mizan test
 inside the project's `.venv` (32 files). No screening, backtest, or purification logic was written —
 those remain Phases 4 through 7 — and no normalization run against a real, operator-backfilled cache
 was performed as part of this automated phase.
+
+**Phase 4 — Screening Engine** (2026-08-30)
+
+Phase 4 gave Mizan its first working compliance verdict, built entirely on top of Phases 1–3's
+untouched foundations, and consuming Phase 3's `fundamentals_facts`/`price_bars` tables for the
+first time since they were built. It shipped `mizan/screening/business_activity.py` (a SIC-code
+first-pass classifier across 21 real, SEC-verified codes spanning `MASTER_PRD.md` §6.1's three
+tiers, plus a pluggable, ships-empty `BusinessActivityOverrideMap` that takes precedence over the
+SIC pass in both directions, keyed by CIK with a mandatory, non-empty `rationale` field);
+`mizan/screening/financial_ratios.py` (pure-arithmetic implementations of AAOIFI's 30/30/5 debt,
+interest-investment, and non-permissible-income ratios, each numerator a closed, summed-as-available
+XBRL tag allow-list, with a numerator-side miss treated as a legitimate `0.0`); `mizan/screening/verdict.py`
+(the `screen(ticker, as_of_date)` entry point — the only function body in `mizan/` permitted to
+resolve "most-recently-filed fact with `filed <= as_of_date`" per concept, combining both layers via
+fail-fast Layer-1-then-Layer-2 ordering into a `Verdict.PURE`/`MIXED`/`NON_COMPLIANT` result with a
+full reason trace, wrapped in `ResultEnvelope`); and `mizan/cli/screen.py` (the `screen` subcommand,
+opening DuckDB strictly read-only, wired into `mizan/cli/main.py` with one added line, following the
+same per-ticker HALT-but-continue exit-code contract every prior CLI verb established). Two live
+external-fact verifications were performed and logged in `docs/modernization_log.md`: one confirmed
+13 of 14 candidate XBRL concept tags against six real companies' EDGAR `companyfacts` responses
+(one, `LongTermInvestments`, logged `[UNVERIFIED]` rather than silently assumed); the other
+confirmed every `SIC_TIER_MAP` code against SEC's own published SIC list and found that
+`PHASE_4_SPEC.md` §4.1's own illustrative "7993 (gambling)" example is not a real, assigned SEC SIC
+code at all — it was omitted from the shipped map rather than shipped as fabricated precision, with
+the finding documented rather than silently corrected. `pyproject.toml` was not modified — Phase 4
+introduces zero new third-party dependencies. Four new test files plus a new
+`tests/fixtures/synthetic_universe.py` module (~12 explicitly-synthetic, clearly-labeled fixture
+tickers, never real issuers) added 81 tests (259 total, all passing) covering every §6e fixture's
+expected verdict, fail-fast structural correctness, config-toggle-driven verdict changes via
+`model_copy`, look-ahead temporal non-interference, override-map precedence in both directions,
+boundary-inclusive (`<=`) threshold semantics, and missing-denominator halting. `ruff check mizan
+tests` is clean under the pinned `ruff==0.16.5` with no new noqa suppressions, and `mypy --strict
+mizan tests` is fully clean inside the project's `.venv` (43 files). The real ~100-ticker curated
+universe and its hand-verified business-activity override map were deliberately not built this
+phase — that remains the project owner's own future research effort, explicitly out of scope for
+this automated build (`PHASE_4_SPEC.md` §9's first, most prominent non-goal) — and no purification,
+backtest, or reporting logic was written; those remain Phases 5 through 7.
