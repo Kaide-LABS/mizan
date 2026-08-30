@@ -56,6 +56,16 @@ in a tool whose output is meant to be reproducible and auditable. Re-check at th
 (the first phase that actually imports `httpx`); if 1.0 has gone stable by then, evaluate and log
 the decision here rather than silently bumping.
 
+**Phase 2 re-check performed, 2026-08-30 (same day — Phase 2 built immediately after Phase 1's
+comprehension pass and the Step 10 blueprint, per this file's own action item above).** `pip index
+versions httpx` against the live PyPI index confirms `0.28.1` is still the newest release; no
+stable `1.0` release exists yet (the `1.0.dev5` pre-release noted above is unchanged and is not
+surfaced by a stable-only index query). **Decision: keep the pin at `httpx==0.28.1`, unchanged.**
+`httpx` is promoted from `[project.optional-dependencies].ingest` (removed, PHASE_2_SPEC.md §2.1)
+to a core `[project.dependencies]` entry in this phase, since `mizan/data/ingest_edgar.py` and
+`mizan/data/ingest_tiingo.py` are the first modules to actually import it — the version number
+itself does not change.
+
 ---
 
 ## 4. Development dependencies (exact pins)
