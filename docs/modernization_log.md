@@ -28,14 +28,10 @@ pass 1, and demoted 1 previously-asserted claim to `[UNVERIFIED]`. See
 | Item | Pinned | Verified | Source |
 |---|---|---|---|
 | Python (declared floor/ceiling) | `>=3.11,<3.15` | 2026-08-30 | Floor set by `pandas` 3.0.5 and `matplotlib` 3.11.1 (both require `>=3.11`); ceiling set because no pinned dependency publishes `cp315` wheels |
-| Python (build/test interpreter) | **3.14.x** — record the exact patch here at first build: `3.14.__` | 2026-08-30 | https://www.python.org/downloads/release/python-3147/ (3.14.7, released 2026-08-05) |
+| Python (build/test interpreter) | **3.14.4** | 2026-08-30 | `python --version` output on the Phase 1 build machine, verified 2026-08-30 (release page: https://www.python.org/downloads/release/python-3147/, 3.14.7, released 2026-08-05 — the build machine runs the earlier 3.14.4 patch, still within the declared `<3.15` range) |
 
 Every runtime and dev dependency pinned below publishes `cp311`–`cp314` wheels, so any interpreter
-in the declared range works. The local machine runs Python 3.14.x.
-
-**Action for the Phase 1 execution agent:** replace `3.14.__` above with the actual
-`python --version` output of the interpreter the project is built against, in the same commit that
-adds `pyproject.toml`.
+in the declared range works. The local machine runs Python 3.14.4.
 
 ---
 
