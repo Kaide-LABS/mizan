@@ -66,6 +66,39 @@ to a core `[project.dependencies]` entry in this phase, since `mizan/data/ingest
 `mizan/data/ingest_tiingo.py` are the first modules to actually import it — the version number
 itself does not change.
 
+**Phase 3 re-check performed, 2026-08-30 (same day, per this file's own §1 governing rule that a
+same-calendar-date entry is not proof no time has passed — PHASE_3_SPEC.md §2.1's explicit action
+item).** `pip index versions duckdb` and `pip index versions pyarrow` run live against the real
+PyPI index from inside the project's `.venv` on the Phase 3 build machine:
+
+```
+$ .venv/Scripts/python -m pip index versions duckdb
+duckdb (1.5.5)
+Available versions: 1.5.5, 1.5.4, 1.5.3, ...
+
+$ .venv/Scripts/python -m pip index versions pyarrow
+pyarrow (25.0.1)
+Available versions: 25.0.1, 25.0.0, 24.0.0, ...
+```
+
+**Decision: both pins are unchanged** — `duckdb==1.5.5` and `pyarrow==25.0.1` are still the newest
+releases on PyPI as of this check. `duckdb` and `pyarrow` are promoted from
+`[project.optional-dependencies].data` (PHASE_1_SPEC.md §2.1's forward declaration, carried
+unimported through Phase 2) to core `[project.dependencies]` entries in Phase 3
+(PHASE_3_SPEC.md §2.1), since `mizan/data/db.py` and `mizan/data/normalize.py` are the first
+modules to actually import them — the version numbers themselves do not change. `pandas` remains
+forward-declared and unused (PHASE_3_SPEC.md §2.2) pending whichever of Phase 5 or Phase 7 needs it
+first.
+
+**PRIMARY KEY constraint-violation behaviour, verified live 2026-08-30 (PHASE_3_SPEC.md §5's own
+build-time verification item):** inserting two rows with an identical PRIMARY KEY and differing
+non-key values via `duckdb.connect()` + `CREATE TABLE ... PRIMARY KEY (...)` + two `INSERT`
+statements raises `duckdb.ConstraintException` ("Duplicate key ... violates primary key
+constraint") on the second `INSERT` — confirmed against DuckDB 1.5.5's actual Python API in this
+project's `.venv`, not assumed from Postgres/SQLite-familiar semantics. This is the backstop guard
+G-N2/G-N3 rely on; the application-level pre-insert conflict check in
+`mizan/data/normalize.py::_bulk_load` is the primary mechanism (PHASE_3_SPEC.md §6.2).
+
 ---
 
 ## 4. Development dependencies (exact pins)
@@ -152,6 +185,20 @@ no `connection=` parameter. `to_arrow_table` is a **connection method** taking o
 **Concurrency:** DuckDB permits **one writer per database file**, coordinated by file locks; readers
 are excluded while a writer holds it. Source: https://duckdb.org/docs/current/connect/concurrency
 (verified 2026-08-30).
+
+**Correction logged, Phase 3, verified live 2026-08-30:** the single-writer file lock above is
+enforced by the OS, **across processes** — it is NOT triggered by a second `duckdb.connect()` call
+against the same path from WITHIN the same process. DuckDB 1.5.5's Python API caches one underlying
+database instance per file path per process: two `connect()` calls to the same path in one process
+share that instance (confirmed empirically — a row inserted via the second connection is
+immediately visible via the first, no exception). A real second OS process attempting to open the
+same file while the first holds it open (non-read-only) *does* raise
+(`_duckdb.IOException: ... The process cannot access the file because it is being used by another
+process`), confirmed empirically via a subprocess test. PHASE_3_SPEC.md §8 AC10's own test
+description ("a second connection attempt ... in the same process") assumed the former would
+reproduce the latter; it does not. `tests/test_data_db.py` exercises the guard with a real second
+process instead. This does not change `mizan/data/db.py`'s implementation (it already contains no
+retry/catch around any DuckDB call) — only how the guard is verified.
 
 ---
 

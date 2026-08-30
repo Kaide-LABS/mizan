@@ -7,17 +7,17 @@ requires-python = ">=3.11,<3.15"
 dependencies = [
     "pydantic==2.13.5",
     "httpx==0.28.1",
+    "duckdb==1.5.5",
+    "pyarrow==25.0.1",
 ]
 
 [project.optional-dependencies]
-# `ingest` extra REMOVED in Phase 2 (PHASE_2_SPEC.md §2.1) — httpx is no longer forward-declared,
-# it is a real runtime dependency imported by mizan/data/ingest_edgar.py and
-# mizan/data/ingest_tiingo.py. The two extras below remain forward-declared and unused, same
-# rationale as Phase 1: harmless to install, a review-blocking finding to import before their
-# owning phase (PHASE_1_SPEC.md §7, §9; PHASE_2_SPEC.md §5, guard G13/G-DEP1).
+# `data` extra NARROWED in Phase 3 (PHASE_3_SPEC.md §2.1) — duckdb/pyarrow are no longer
+# forward-declared, they are real Phase 3 dependencies (mizan/data/db.py, mizan/data/normalize.py).
+# `pandas` remains forward-declared and unused, same rationale as Phase 1/2: harmless to install, a
+# review-blocking finding to import before its owning phase (PHASE_1_SPEC.md §7, §9;
+# PHASE_2_SPEC.md §5, guard G13/G-DEP1; PHASE_3_SPEC.md §2.2, §7 guard G-DEP3).
 data = [
-    "duckdb==1.5.5",
-    "pyarrow==25.0.1",
     "pandas==3.0.5",
 ]
 report = [
@@ -44,6 +44,13 @@ strict = true
 python_version = "3.11"          # lowest supported interpreter — check against the floor, not the ceiling
 files = ["mizan", "tests"]
 warn_unused_configs = true
+
+# `pyarrow` 25.0.1 ships no inline type stubs / py.typed marker (confirmed live, PHASE_3_SPEC.md
+# §2.1's promoted dependency) — this narrowly silences mypy's import-untyped complaint about the
+# third-party package itself; it does not relax --strict for any Mizan-owned module.
+[[tool.mypy.overrides]]
+module = "pyarrow.*"
+ignore_missing_imports = true
 
 [tool.ruff]
 target-version = "py311"
