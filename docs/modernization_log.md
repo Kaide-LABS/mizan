@@ -15,11 +15,14 @@ this file is the record of what was *verified* and `pyproject.toml` is the recor
 | Pass | Date | Performed by | Scope |
 |---|---|---|---|
 | 1 | 2026-07-02 | Step 7 synthesis (`ULTIMATE_PRD.md` v1) | Library versions only; SEC/Tiingo re-fetch failed (SPA shell), numbers inherited unverified |
-| **2** | **2026-08-30** | **Step 10 PRD modernization + Phase 1 blueprint** | **All library versions; SEC EDGAR policy + live endpoint shapes; Tiingo endpoint/limits/auth; DuckDB + Pydantic API signatures; AAOIFI primary-source methodology; 2024–2026 literature sweep** |
+| 2 | 2026-08-30 | Step 10 PRD modernization + Phase 1 blueprint | All library versions; SEC EDGAR policy + live endpoint shapes; Tiingo endpoint/limits/auth; DuckDB + Pydantic API signatures; AAOIFI primary-source methodology; 2024–2026 literature sweep |
+| **3** | **2026-08-30** | **Phase 4 implementation** | **`SIC_TIER_MAP`'s SIC codes (live against SEC's own published code list + live EDGAR company-search per code); §6b's XBRL concept-tag allow-lists (live against real EDGAR `companyfacts` responses for six real CIKs)** |
 
 Pass 2 corrected 2 wrong API facts, 1 wrong external limit, discharged 2 unverified flags from
 pass 1, and demoted 1 previously-asserted claim to `[UNVERIFIED]`. See
-`ULTIMATE_PRD.md` § MODERNIZATION CHANGELOG for the itemised list.
+`ULTIMATE_PRD.md` § MODERNIZATION CHANGELOG for the itemised list. Pass 3 (§6.3 below) confirmed 13
+of 14 candidate XBRL tags live and found that `PHASE_4_SPEC.md` §4.1's own illustrative "7993
+(gambling)" SIC code is not an SEC-assigned code at all.
 
 ---
 
@@ -256,6 +259,61 @@ and stalls under a requests/hour cap.
 on a block. Tiingo needs **no spacing at all** but a hard **hourly/daily request budget counter**.
 These are different mechanisms; the two ingestion jobs must not share one rate-limiter
 implementation.
+
+### 6.3 Phase 4: XBRL concept-tag verification (`mizan/screening/financial_ratios.py` §2.2)
+
+Every tag `financial_ratios.py`'s four allow-lists name was checked live 2026-08-30 against real
+EDGAR `companyfacts` responses (`GET https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json`,
+same declared User-Agent header as §6.1). 13 of 14 candidate tags confirmed; `LongTermInvestments`
+could not be confirmed against any of the six real companies checked in this pass.
+
+| Tag | Taxonomy | Role | Confirmed against | Shape |
+|---|---|---|---|---|
+| `Assets` | us-gaap | two-axis denominator (TOTAL_ASSETS basis) | Apple Inc., CIK 0000320193 | instantaneous, unit USD — as expected |
+| `EntityCommonStockSharesOutstanding` | dei | two-axis denominator (MARKET_CAP basis) | Apple Inc., CIK 0000320193 | instantaneous, unit shares — as expected |
+| `LongTermDebtNoncurrent` | us-gaap | `INTEREST_BEARING_DEBT_TAGS` | Apple Inc., CIK 0000320193 | instantaneous, unit USD |
+| `LongTermDebtCurrent` | us-gaap | `INTEREST_BEARING_DEBT_TAGS` | Apple Inc., CIK 0000320193 | instantaneous, unit USD |
+| `ShortTermBorrowings` | us-gaap | `INTEREST_BEARING_DEBT_TAGS` | JPMorgan Chase & Co., CIK 0000019617 | instantaneous, unit USD |
+| `DebtCurrent` | us-gaap | `INTEREST_BEARING_DEBT_TAGS` | The Travelers Companies, Inc., CIK 0000086312 | instantaneous, unit USD |
+| `ShortTermInvestments` | us-gaap | `INTEREST_BEARING_INVESTMENT_TAGS` | NIKE, Inc. (CIK 0000320187) and Caterpillar Inc. (CIK 0000018230) | instantaneous, unit USD |
+| `MarketableSecuritiesCurrent` | us-gaap | `INTEREST_BEARING_INVESTMENT_TAGS` | Apple Inc., CIK 0000320193 | instantaneous, unit USD |
+| `LongTermInvestments` | us-gaap | `INTEREST_BEARING_INVESTMENT_TAGS` | **not found** in any of the six companies checked (Apple, JPMorgan, Travelers, NIKE, Caterpillar, Progressive) | **`[UNVERIFIED]`** — standard, taxonomically valid `us-gaap` concept name; live presence unconfirmed this pass |
+| `InvestmentIncomeInterest` | us-gaap | `NON_PERMISSIBLE_INCOME_TAGS` | JPMorgan Chase & Co., CIK 0000019617 | duration, unit USD |
+| `InterestIncomeOther` | us-gaap | `NON_PERMISSIBLE_INCOME_TAGS` | JPMorgan Chase & Co., CIK 0000019617 | duration, unit USD |
+| `InterestAndDividendIncomeOperating` | us-gaap | `NON_PERMISSIBLE_INCOME_TAGS` | JPMorgan Chase & Co., CIK 0000019617 | duration, unit USD |
+| `Revenues` | us-gaap | `TOTAL_REVENUE_TAGS` | Apple Inc., CIK 0000320193 | duration, unit USD |
+| `RevenueFromContractWithCustomerExcludingAssessedTax` | us-gaap | `TOTAL_REVENUE_TAGS` | Apple Inc., CIK 0000320193 | duration, unit USD |
+
+**Why the numerator-side "misses" (`ShortTermBorrowings`/`ShortTermInvestments`/the three income
+tags absent from Apple's own companyfacts) are not a problem:** Apple, having no
+interest-bearing-deposit core business, simply never files those bank-typical tags at all — this is
+exactly the "0.0, not an error" numerator-absence design `financial_ratios.py` already anticipates
+(§4.2 of `PHASE_4_SPEC.md`), confirmed as a real, observed pattern rather than only a documented
+policy. Note also, purely as an observation for a future pass and NOT acted on in this phase's own
+tag lists (which are fixed by `PHASE_4_SPEC.md` §4.2 and out of scope to revise here): Apple itself
+reports interest/dividend income under `InvestmentIncomeInterestAndDividend` (not
+`InvestmentIncomeInterest`) and short-term borrowings under `OtherShortTermBorrowings` (not
+`ShortTermBorrowings`) — two real, live-observed us-gaap tag variants outside the current allow-lists.
+
+### 6.4 Phase 4: `SIC_TIER_MAP` SIC-code verification (`mizan/screening/business_activity.py` §4.1)
+
+Every SIC code in `SIC_TIER_MAP` was checked live 2026-08-30 against SEC's own published SIC code
+list
+(https://www.sec.gov/corpfin/division-of-corporation-finance-standard-industrial-classification-sic-code-list,
+444 assigned codes) and cross-checked for at least one real registered filer via
+`https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&SIC={code}`. All codes named in
+`PHASE_4_SPEC.md` §4.1's illustrative table were confirmed **except one**:
+
+**Correction logged:** `PHASE_4_SPEC.md` §4.1 names "7993 (gambling)" as an illustrative Tier-0 SIC
+code. **SIC 7993 is not an SEC-assigned code at all** — absent from SEC's own published list, and a
+live EDGAR company-search for `SIC=7993` returns zero registrants. Checked instead: two real
+gambling/casino issuers — Wynn Resorts, Limited (CIK 0001174922) and Caesars Entertainment, Inc.
+(CIK 0001590895) — both file under SIC **7011 (Hotels & Motels)**, which `SIC_TIER_MAP` already
+carries (as Tier 1, per `PHASE_4_SPEC.md` §4.1's own table). `SIC_TIER_MAP` therefore omits 7993
+entirely rather than including a code that was itself never verified to exist — a documented,
+known granularity limitation of the generic SIC-first-pass mechanism (a gambling-core-business
+issuer is only caught when `business_activity_tier_1_enabled` is on, or via a hand-researched
+override), not a silently-dropped requirement.
 
 ---
 

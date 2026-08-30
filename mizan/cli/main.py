@@ -11,6 +11,7 @@ from collections.abc import Callable, Sequence
 
 from mizan.cli import ingest as ingest_cli
 from mizan.cli import normalize as normalize_cli
+from mizan.cli import screen as screen_cli
 from mizan.config.boot_check import FiqhRegisterError, InvariantViolationError, check_all
 
 
@@ -18,8 +19,9 @@ def build_parser() -> argparse.ArgumentParser:
     """Build the top-level `mizan` parser.
 
     Registers one subparser per verb; Phase 2 registered `ingest`
-    (`mizan.cli.ingest.add_subparser`), Phase 3 adds `normalize`
-    (`mizan.cli.normalize.add_subparser`). Later phases each add one line here for their verb — this
+    (`mizan.cli.ingest.add_subparser`), Phase 3 added `normalize`
+    (`mizan.cli.normalize.add_subparser`), Phase 4 adds `screen`
+    (`mizan.cli.screen.add_subparser`). Later phases each add one line here for their verb — this
     file is the one place later phases touch in `mizan/cli/`, per PHASE_2_SPEC.md §1's
     additive-extension note.
     """
@@ -29,6 +31,7 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
     ingest_cli.add_subparser(subparsers)
     normalize_cli.add_subparser(subparsers)
+    screen_cli.add_subparser(subparsers)
     return parser
 
 
