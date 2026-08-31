@@ -76,12 +76,17 @@ class FundamentalsFactFixture:
 
 @dataclass(frozen=True)
 class PriceBarFixture:
-    """One pre-normalized `price_bars` row (only the columns Phase 4 actually reads —
-    `trade_date`/`raw_close` — vary meaningfully across fixtures; the rest are filled with
-    plausible constants)."""
+    """One pre-normalized `price_bars` row (only the columns Phase 4/5/6 actually read —
+    `trade_date`/`raw_close`/`div_cash` — vary meaningfully across fixtures; the rest are filled
+    with plausible constants).
+
+    `div_cash` (PHASE_6_SPEC.md §6a): defaults `0.0` — an additive-only field, so every Phase 4/5
+    fixture ticker's already-approved price bars are byte-for-byte unchanged (§8 AC17). Only
+    Phase 6's own new fixture tickers set it to a nonzero value."""
 
     trade_date: date
     raw_close: float
+    div_cash: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -438,6 +443,206 @@ ZZFLIP01 = SyntheticTicker(
     ),
 )
 
+#: PHASE_6_SPEC.md §6a/§8 AC1: a ticker whose `non_permissible_income_ratio` DRIFTS between two
+#: rebalances (2% -> 4%), both comfortably under the 5% threshold so the ticker stays `MIXED`
+#: throughout and is never divested — isolating the ratio-drift/date-pinning question from the
+#: flip/grace/divest mechanic entirely. Same "two facts, two `filed` dates, same tag" mechanism
+#: `ZZLOOKAHEAD01`/`ZZFLIP01` already exercise, applied to `InvestmentIncomeInterest` instead of
+#: `LongTermDebtNoncurrent`. Two nonzero `div_cash` price-bar days straddle the ratio-drift
+#: boundary (rebalance 2 = `2026-04-01`): one BEFORE it (pinned ratio 2%), one AFTER it (pinned
+#: ratio 4%) — the exact anti-undercount property `purify_dividend`'s date-pinned ratio lookup
+#: (`mizan/purification/ledger.py`) must prove.
+ZZMIXED_RATIODRIFT01_EARLY_INCOME_FACT = FundamentalsFactFixture(
+    taxonomy="us-gaap",
+    tag="InvestmentIncomeInterest",
+    unit="USD",
+    period_start=date(2025, 1, 1),
+    period_end=date(2025, 12, 31),
+    is_instantaneous=False,
+    value=1_000_000.0,
+    accn="9990000014-26-000003",
+    filed=date(2025, 6, 1),
+)
+
+ZZMIXED_RATIODRIFT01_LATER_INCOME_FACT = FundamentalsFactFixture(
+    taxonomy="us-gaap",
+    tag="InvestmentIncomeInterest",
+    unit="USD",
+    period_start=date(2025, 1, 1),
+    period_end=date(2025, 12, 31),
+    is_instantaneous=False,
+    value=2_000_000.0,
+    accn="9990000014-26-000004",
+    filed=date(2026, 2, 1),
+)
+
+ZZMIXED_RATIODRIFT01 = SyntheticTicker(
+    ticker="ZZMIXED_RATIODRIFT01",
+    cik="9990000014",
+    sic=_CLEAN_SIC,
+    description=(
+        "PHASE_6_SPEC.md §6a/§8 AC1: non_permissible_income_ratio is 2% as of rebalance 1 "
+        "(2026-01-01), 4% as of rebalance 2 (2026-04-01) and every later rebalance — both under "
+        "the 5% threshold, so the ticker stays MIXED throughout and is never divested. Two "
+        "dividends, one purified at each period's own ratio, prove the date-pinned ratio lookup "
+        "prevents a 'purification undercount' (ULTIMATE_PRD.md §4.7)."
+    ),
+    facts=(
+        FundamentalsFactFixture(
+            taxonomy="dei",
+            tag="EntityCommonStockSharesOutstanding",
+            unit="shares",
+            period_start=date(2025, 12, 31),
+            period_end=date(2025, 12, 31),
+            is_instantaneous=True,
+            value=1_000_000.0,
+            accn="9990000014-26-000001",
+            filed=date(2025, 6, 1),
+        ),
+        FundamentalsFactFixture(
+            taxonomy="us-gaap",
+            tag="Revenues",
+            unit="USD",
+            period_start=date(2025, 1, 1),
+            period_end=date(2025, 12, 31),
+            is_instantaneous=False,
+            value=50_000_000.0,
+            accn="9990000014-26-000002",
+            filed=date(2025, 6, 1),
+        ),
+        ZZMIXED_RATIODRIFT01_EARLY_INCOME_FACT,
+        ZZMIXED_RATIODRIFT01_LATER_INCOME_FACT,
+    ),
+    price_bars=(
+        PriceBarFixture(trade_date=date(2026, 1, 1), raw_close=100.0),
+        PriceBarFixture(trade_date=date(2026, 2, 15), raw_close=100.0, div_cash=5.0),
+        PriceBarFixture(trade_date=date(2026, 4, 1), raw_close=100.0),
+        PriceBarFixture(trade_date=date(2026, 5, 15), raw_close=100.0, div_cash=5.0),
+        PriceBarFixture(trade_date=date(2026, 7, 1), raw_close=100.0),
+    ),
+)
+
+#: PHASE_6_SPEC.md §8 AC2: a Layer-1-clean, all-zero-ratio (`Verdict.PURE`) ticker that pays a
+#: dividend — distinct from the existing, unmodified `ZZPURE01` (never touch an existing ticker's
+#: fields, §1). Proves a Pure-verdict dividend produces ZERO `DividendPurificationEntry` records,
+#: not one `purified_amount == 0.0` entry.
+ZZPURE_DIV01 = SyntheticTicker(
+    ticker="ZZPURE_DIV01",
+    cik="9990000016",
+    sic=_CLEAN_SIC,
+    description=(
+        "PHASE_6_SPEC.md §8 AC2: Layer-1-clean + all-zero ratios -> PURE, pays one dividend -> "
+        "zero DividendPurificationEntry records, not a zero-amount entry."
+    ),
+    facts=(
+        FundamentalsFactFixture(
+            taxonomy="dei",
+            tag="EntityCommonStockSharesOutstanding",
+            unit="shares",
+            period_start=date(2025, 12, 31),
+            period_end=date(2025, 12, 31),
+            is_instantaneous=True,
+            value=1_000_000.0,
+            accn="9990000016-26-000001",
+            filed=date(2025, 6, 1),
+        ),
+        FundamentalsFactFixture(
+            taxonomy="us-gaap",
+            tag="Revenues",
+            unit="USD",
+            period_start=date(2025, 1, 1),
+            period_end=date(2025, 12, 31),
+            is_instantaneous=False,
+            value=50_000_000.0,
+            accn="9990000016-26-000002",
+            filed=date(2025, 6, 1),
+        ),
+    ),
+    price_bars=(
+        PriceBarFixture(trade_date=date(2026, 1, 1), raw_close=100.0),
+        PriceBarFixture(trade_date=date(2026, 2, 15), raw_close=100.0, div_cash=5.0),
+        PriceBarFixture(trade_date=date(2026, 4, 1), raw_close=100.0),
+        # 2026-05-15 (with no div_cash of its own) so a combined backtest alongside
+        # ZZMIXED_RATIODRIFT01 (whose own second dividend falls on this date) always has a price
+        # row for THIS ticker too, on every trading day either ticker's own union contributes.
+        PriceBarFixture(trade_date=date(2026, 5, 15), raw_close=100.0),
+        PriceBarFixture(trade_date=date(2026, 7, 1), raw_close=100.0),
+    ),
+)
+
+#: PHASE_6_SPEC.md §6b/§8 AC3: structurally identical to `ZZFLIP01` (same debt-fact-drift
+#: mechanism, flip at rebalance 2 = `2026-04-01`, divest at rebalance 3 = `2026-07-01`) but with a
+#: genuine, nonzero price appreciation over the non-compliant window (`100.0 -> 130.0`) for
+#: `compute_divestment_attribution` (`mizan/purification/attribution.py`, Fork C) to compute. A NEW
+#: ticker, not a mutation of `ZZFLIP01`'s own already-approved flat-100.0 price bars (§1).
+ZZDIVEST_APPREC01_EARLY_DEBT_FACT = FundamentalsFactFixture(
+    taxonomy="us-gaap",
+    tag="LongTermDebtNoncurrent",
+    unit="USD",
+    period_start=date(2025, 12, 31),
+    period_end=date(2025, 12, 31),
+    is_instantaneous=True,
+    value=0.0,
+    accn="9990000015-26-000003",
+    filed=date(2025, 6, 1),
+)
+
+ZZDIVEST_APPREC01_FLIP_DEBT_FACT = FundamentalsFactFixture(
+    taxonomy="us-gaap",
+    tag="LongTermDebtNoncurrent",
+    unit="USD",
+    period_start=date(2025, 12, 31),
+    period_end=date(2025, 12, 31),
+    is_instantaneous=True,
+    value=50_000_000.0,
+    accn="9990000015-26-000004",
+    filed=date(2026, 2, 1),
+)
+
+ZZDIVEST_APPREC01 = SyntheticTicker(
+    ticker="ZZDIVEST_APPREC01",
+    cik="9990000015",
+    sic=_CLEAN_SIC,
+    description=(
+        "PHASE_6_SPEC.md §6b/§8 AC3: PURE as of 2026-01-01, flips NON_COMPLIANT at rebalance 2 "
+        "(2026-04-01, same debt-fact-drift mechanism as ZZFLIP01), divests at rebalance 3 "
+        "(2026-07-01). raw_close is 100.0 at flip_date and 130.0 at divest_date, a genuine "
+        "non-negative price appreciation over the non-compliant window for Fork C to attribute."
+    ),
+    facts=(
+        FundamentalsFactFixture(
+            taxonomy="dei",
+            tag="EntityCommonStockSharesOutstanding",
+            unit="shares",
+            period_start=date(2025, 12, 31),
+            period_end=date(2025, 12, 31),
+            is_instantaneous=True,
+            value=1_000_000.0,
+            accn="9990000015-26-000001",
+            filed=date(2025, 6, 1),
+        ),
+        FundamentalsFactFixture(
+            taxonomy="us-gaap",
+            tag="Revenues",
+            unit="USD",
+            period_start=date(2025, 1, 1),
+            period_end=date(2025, 12, 31),
+            is_instantaneous=False,
+            value=50_000_000.0,
+            accn="9990000015-26-000002",
+            filed=date(2025, 6, 1),
+        ),
+        ZZDIVEST_APPREC01_EARLY_DEBT_FACT,
+        ZZDIVEST_APPREC01_FLIP_DEBT_FACT,
+    ),
+    price_bars=(
+        PriceBarFixture(trade_date=date(2026, 1, 1), raw_close=100.0),
+        PriceBarFixture(trade_date=date(2026, 4, 1), raw_close=100.0),
+        PriceBarFixture(trade_date=date(2026, 7, 1), raw_close=130.0),
+        PriceBarFixture(trade_date=date(2026, 10, 1), raw_close=130.0),
+    ),
+)
+
 ALL_SYNTHETIC_TICKERS: tuple[SyntheticTicker, ...] = (
     ZZPURE01,
     ZZMIXED01,
@@ -452,6 +657,9 @@ ALL_SYNTHETIC_TICKERS: tuple[SyntheticTicker, ...] = (
     ZZLOOKAHEAD01,
     ZZNODATA01,
     ZZFLIP01,
+    ZZMIXED_RATIODRIFT01,
+    ZZPURE_DIV01,
+    ZZDIVEST_APPREC01,
 )
 
 
@@ -552,7 +760,7 @@ def load_into_duckdb(
                 bar.raw_close,
                 bar.raw_close,
                 1_000,
-                0.0,
+                bar.div_cash,
                 1.0,
             ],
         )

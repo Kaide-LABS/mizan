@@ -12,8 +12,10 @@ from pathlib import Path
 
 from mizan.backtest.clock import BacktestResult, run_backtest
 from mizan.backtest.strategy import EqualWeightStrategy
+from mizan.config.fiqh_params import FIQH_PARAMS
 from mizan.data import db
 from mizan.data.ingest_edgar import CikResolutionError
+from mizan.purification.ledger import PurificationLedger, purify_backtest_result
 from mizan.screening.business_activity import SicResolutionError, load_override_map
 from mizan.screening.verdict import InsufficientDataError, NotNormalizedError
 
@@ -80,12 +82,17 @@ def run(args: argparse.Namespace) -> int:
     """Opens one READ-ONLY DuckDB connection (`db.connect(args.db_path, read_only=True)` —
     `backtest` never writes to DuckDB), loads the override map once via
     `load_override_map(args.overrides_path)`, constructs `EqualWeightStrategy()`, calls
-    `run_backtest(...)`, and prints a human-readable summary to stdout: final portfolio value,
-    every `DivestmentEvent` (ticker, flip date, divest date), and every `DividendEvent`'s total
-    credited cash per ticker. Catches the same per-ticker-shaped exceptions `mizan screen` catches
+    `run_backtest(...)`, purifies the result via `purify_backtest_result(...)` (PHASE_6_SPEC.md §4.3
+    — reusing the SAME `con`/`args.cache_dir`/`overrides` local variables `run_backtest` was already
+    called with, while `con` is still open, guard G-P7), and prints a human-readable summary to
+    stdout: final portfolio value, every `DivestmentEvent` (ticker, flip date, divest date), every
+    `DividendEvent`'s total credited cash per ticker, and the Phase 6 purification summary
+    (purification liability, gross return, net-of-purification return, and every purified
+    dividend/divestment entry). Catches the same per-ticker-shaped exceptions `mizan screen` catches
     (`CikResolutionError`/`SicResolutionError`/`NotNormalizedError`/`InsufficientDataError`, all
-    reachable via `run_backtest`'s internal `screen()` calls) at the WHOLE-BACKTEST level. Prints
-    a `HALT: ...` message to stderr and returns exit code 1 on any such exception.
+    reachable via `run_backtest`'s and `purify_backtest_result`'s internal `screen()` calls) at the
+    WHOLE-BACKTEST level. Prints a `HALT: ...` message to stderr and returns exit code 1 on any such
+    exception.
     """
     overrides = load_override_map(args.overrides_path)
     strategy = EqualWeightStrategy()
@@ -102,11 +109,17 @@ def run(args: argparse.Namespace) -> int:
                 cache_dir=args.cache_dir,
                 overrides=overrides,
             )
+            result = BacktestResult.model_validate(envelope.payload)
+            result = purify_backtest_result(
+                result,
+                con=con,
+                cache_dir=args.cache_dir,
+                overrides=overrides,
+                fiqh_params=FIQH_PARAMS,
+            )
         except _HALTING_ERRORS as exc:
             print(f"HALT: {type(exc).__name__}: {exc}", file=sys.stderr)
             return 1
-
-    result = BacktestResult.model_validate(envelope.payload)
 
     final_value = (
         result.daily_snapshots[-1].portfolio_value if result.daily_snapshots else args.initial_cash
@@ -125,5 +138,21 @@ def run(args: argparse.Namespace) -> int:
         )
     for ticker in sorted(totals):
         print(f"DIVIDENDS {ticker}: total_cash_received={totals[ticker]:.2f}")
+
+    ledger = PurificationLedger.model_validate(result.purification_ledger)
+    print(f"Purification liability: {ledger.purification_liability:.2f}")
+    print(f"Gross return: {ledger.gross_return:.6f}")
+    print(f"Net-of-purification return: {ledger.net_of_purification_return:.6f}")
+    for dividend_entry in ledger.dividend_entries:
+        print(
+            f"PURIFIED DIVIDEND {dividend_entry.ticker} ex_date={dividend_entry.ex_date} "
+            f"ratio={dividend_entry.ratio_used:.6f} amount={dividend_entry.purified_amount:.2f}"
+        )
+    for divestment_entry in ledger.divestment_entries:
+        print(
+            f"PURIFIED DIVESTMENT {divestment_entry.ticker} "
+            f"flip_date={divestment_entry.flip_date} divest_date={divestment_entry.divest_date} "
+            f"amount={divestment_entry.purified_amount:.2f}"
+        )
 
     return 0
