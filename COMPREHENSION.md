@@ -1,12 +1,11 @@
 # COMPREHENSION.md — Mizan
 
-Written after Phase 6 ("Purification Engine — side-ledger") was reviewed and approved.
-Sections 1–6 below describe the repository as it exists right now — Phase 1 ("Foundation & Config"),
-Phase 2 ("Ingestion & Raw Cache"), Phase 3 ("Normalization & DuckDB Store"), Phase 4 ("Screening
-Engine"), Phase 5 ("Backtest Engine & Compliance-Flip State Machine"), and Phase 6 combined —
-grounded in the code read directly this pass, not in what any spec or prior handoff claimed. The
-Phase Log at the bottom is append-only; Phase 1's through Phase 5's entries are preserved untouched
-below the new Phase 6 entry.
+Written after Phase 7 ("Reporting — static HTML + plots") was reviewed and approved. **Phase 7 is
+the final phase of Mizan V1.** Sections 1–6 below describe the repository as it exists right now —
+Phase 1 ("Foundation & Config") through Phase 7 combined, the complete V1 system — grounded in the
+code read directly this pass, not in what any spec or prior handoff claimed. The Phase Log at the
+bottom is append-only; Phase 1's through Phase 6's entries are preserved untouched below the new
+Phase 7 entry.
 
 ---
 
@@ -17,130 +16,136 @@ strategies that follow Islamic finance rules ("halal" or "Shariah-compliant" inv
 historical US stock data. It is not a live trading system — no real money ever moves through it. It
 is a sandbox for learning whether a rule-respecting strategy would have worked.
 
-The core tension the whole project is built around: which Islamic finance rules are truly settled
-(no company may profit mainly from things like alcohol, gambling, conventional interest-based
-banking, and so on), and which rules are genuinely disputed even among qualified scholars (exactly
-how do you measure "how much debt is too much debt," expressed as a percentage of what?). The
-project's design insists on keeping these two categories visibly separate at all times: settled
-rules are locked in stone and cannot be changed by anyone running the software; disputed rules are
-left as clearly labeled, adjustable settings, each one stamped "not yet confirmed by a scholar,"
-with an honest note about exactly what is uncertain.
+**With Phase 7 shipped, the full pipeline is now complete, end to end, for the first time.** In plain
+language, here is what Mizan does today, start to finish: it pulls real financial data for a set of
+companies you name (their filings from SEC EDGAR, their daily stock prices and dividends from
+Tiingo) → it screens each one against Islamic finance rules to see if it's investable, using both a
+business-activity check and a set of financial-ratio checks → it simulates holding a portfolio of the
+compliant ones over time, stepping through calendar quarters, automatically selling anything that
+stops being compliant only after a one-quarter grace period (never panic-selling the instant a
+verdict flips) → it tracks how much of any dividend income (and, if you turn the setting on, any
+price gain realized while forced out during that grace period) came from a still-impure sliver of an
+otherwise-compliant company's business, and sets that amount aside in a separate running total rather
+than quietly netting it out of your returns → and now, new this phase, it generates one static,
+self-contained HTML webpage summarizing all of it — every dollar figure, every per-ticker verdict,
+two charts, and, appearing before any of those numbers in the page itself, every caveat and every
+disputed judgment call the run depended on, stated plainly rather than hidden in a README a user
+would have to go looking for.
+
+The core tension the whole project is built around, unchanged since Phase 1: which Islamic finance
+rules are truly settled (no company may profit mainly from things like alcohol, gambling,
+conventional interest-based banking, and so on), and which rules are genuinely disputed even among
+qualified scholars (exactly how do you measure "how much debt is too much debt," expressed as a
+percentage of what?). The project's design insists on keeping these two categories visibly separate
+at all times: settled rules are locked in stone and cannot be changed by anyone running the software;
+disputed rules are left as clearly labeled, adjustable settings, each one stamped "not yet confirmed
+by a scholar," with an honest note about exactly what is uncertain. Phase 7's report is where that
+separation finally becomes visible to a human being who never opens a Python file — the generated
+page renders the entire eleven-row disputed-rules register, in full, on every single run.
+
+**Walking the pipeline one phase at a time, now that all seven exist:**
 
 Phase 1 built the foundation everything else stands on: the list of seven settled rules, the list of
 eleven disputed judgment calls (each with its best current guess, a citation, and an honest note
 about what's unclear), a "boot check" that refuses to even start the program if any of that
-foundation looks wrong, and a handful of shared building-block definitions.
+foundation looks wrong, and a handful of shared building-block definitions — including the
+"caveat" concept that Phase 7 ultimately builds its entire honesty guarantee on top of.
 
 Phase 2 taught Mizan how to go out and pull real financial data for a given stock ticker from two
-sources — the US government's own company-filings database (SEC EDGAR, for company fundamentals
-like revenue and debt) and a commercial market-data provider (Tiingo, for daily stock prices and
-dividends) — and to save every single response it gets to a local folder on disk before doing
-anything else with it.
+sources — SEC EDGAR for company fundamentals, Tiingo for daily stock prices and dividends — and to
+save every single response it gets to a local folder on disk before doing anything else with it.
 
 Phase 3 turned those saved-but-still-raw files into something a computer program can actually query
 and trust — one table for company financial facts, one table for daily stock prices, both loaded
-into a real local database (DuckDB) with a duplicate guard and a closed unit-of-measurement
-allow-list built directly into the loading step.
+into a real local database (DuckDB).
 
-Phase 4 gave Mizan its first working compliance verdict. Given a ticker symbol and a date, `mizan
-screen` runs a business-activity check (does the company's registered industry code fall into a
-disqualifying bucket?) followed, if that passes, by a financial-ratio check (how much interest-
-bearing debt/investment does the company carry, how much of its revenue is non-halal income —
-each against a configurable percentage threshold). The result is one of three verdicts — Pure,
+Phase 4 gave Mizan its first working compliance verdict: `mizan screen` runs a business-activity
+check followed, if that passes, by a financial-ratio check, producing one of three verdicts — Pure,
 Mixed, or Non-compliant — always with a full, human-readable trace of exactly which check drove it.
 
-**Phase 5 is where Mizan stops answering "is this company halal right now?" and starts answering
-"what would have happened if I'd actually held a portfolio of halal stocks over time?"** Given a
-starting cash amount and a strategy (a rule for picking which
-compliant stocks to hold, out of a candidate list the operator supplies), the new backtest engine
-steps through calendar time one quarter at a time. At every quarterly boundary it does the same
-thing `mizan screen` would do for a single ticker on a single day — it re-runs the real screening
-engine, fresh, against every currently-held stock and every candidate stock in the universe. If a
-held stock's fresh verdict comes back non-compliant when it was compliant before, the engine does
-NOT sell it immediately. This is the project's signature mechanic, the whole reason Phase 5 exists
-rather than a generic backtester: a stock that flips out of compliance enters a one-rebalance-long
-"grace period" — it is held, completely untouched (same share count, no trades against it, no cash
-movement), through exactly one more quarterly rebalance, and only forced out of the portfolio
-("divested") at the rebalance after that. This mirrors how a real Islamic fund manager would
-actually behave — not panic-selling the instant a company's numbers drift, but giving a fixed,
-short, config-controlled grace window before acting. Along the way, the engine also tracks real
-stock splits (adjusting share counts, never prices) and real cash dividends (credited straight to
-cash, never reinvested automatically) day by day. Cash itself never earns interest, ever, by
-design — a permanent Phase 1 rule, not a Phase 5 choice, and Phase 5's own portfolio math reads that
-rule from the same single source of truth rather than re-asserting it.
+Phase 5 is where Mizan stopped answering "is this company halal right now?" and started answering
+"what would have happened if I'd actually held a portfolio of halal stocks over time?" — the
+quarterly-rebalance backtest engine, with its signature flip → one-quarter grace period → forced
+divestment mechanic, so a stock that drifts out of compliance isn't sold the instant the numbers
+move.
 
-Two things worth being explicit about, in the same honesty register every prior phase's walkthrough
-used. First, the only "strategy" that ships is the simplest possible one — split money equally
-across every compliant stock, all cash otherwise — presented explicitly as a reference
-implementation and testing vehicle, not as real investment advice; building an actual research
-strategy on top of this substrate is the owner's own future work. Second, and most importantly:
-**this still only runs against the same small set of invented, clearly-fake test tickers (`ZZPURE01`,
-`ZZFLIP01`, etc.) Phase 4 and 5 built — the real ~100-ticker universe of actual companies a person
-would want to backtest against still does not exist anywhere in this repository.** Phase 5 proves the
-mechanism (the quarterly clock, the grace period, the re-screening) works correctly against
-synthetic data engineered to exercise it; it does not, and was never supposed to, produce a
-trustworthy backtest result for any real stock.
+Phase 6 is where Mizan stopped just tracking gross portfolio value and started honestly tracking the
+money that was never really "clean" in the first place — the purification side-ledger, which
+computes (but never moves or donates) exactly how much of each Mixed-verdict dividend, and
+optionally how much of a forced-divestment's price gain, would need to be given to charity under
+AAOIFI's own rule, tracked entirely off to the side so the backtest can report two honest bottom
+lines — gross return and net-of-purification return — instead of one silently blended figure.
 
-**Phase 6 is where Mizan stops just tracking gross portfolio value and
-starts honestly tracking the money that was never really "clean" in the first place.** Some of the
-stocks the backtest holds get a "compliant, but with a little non-halal income mixed in" verdict —
-Mixed, not Pure. When a Mixed stock pays a dividend, part of that dividend cash came from the
-non-halal sliver of the company's business. Phase 6 does not remove that money from the investor's
-returns — it never touches the portfolio's actual cash or value at all — instead it calculates
-exactly how much of each dividend is impure (the company's own non-halal-income percentage, applied
-to that specific dividend payment) and adds it to a separate running total, a "purification
-liability," tracked entirely off to the side. In real Islamic-finance practice this liability is the
-amount a person would be expected to donate to charity, since AAOIFI's own rule is that non-halal
-income must never be counted as part of an investor's real return. **Mizan computes and tracks this
-number; it does not, and was never meant to, actually donate anything anywhere — there is no
-charity-transfer feature, no payment integration, nothing beyond an honest, auditable running total.**
+**Phase 7, the final phase, is where all of that finally becomes something a human can actually look
+at without reading Python.** It adds exactly one new capability: `mizan report`, a command that runs
+the same backtest-then-purify pipeline `mizan backtest` already runs, then hands the result to a
+brand-new rendering module that builds a single HTML file — no server, no database of its own, no
+external image files, nothing but one file you can double-click open in any browser, anywhere,
+forever, disconnected from the machine that generated it. That file always contains, in this fixed
+order: every caveat active on the run, stated in full sentences, before any number appears; the
+complete eleven-row disputed-rules register; the two return figures side by side, never blended into
+one; a per-ticker table of what each holding's compliance history and outcome was; the full
+purification-ledger detail, dividend by dividend and divestment by divestment; and two charts — a
+portfolio-value line chart comparing the gross curve against the net-of-purification curve, and a bar
+chart showing which tickers are actually responsible for how much of the total purification
+liability. The charts are pictures (PNG images), generated by `matplotlib` and embedded directly in
+the page as base64 text, not linked to separate files — the entire report, images included, is one
+portable document.
 
-Because the liability is tracked separately rather than subtracted from the real numbers, the
-backtest can now report two different bottom lines instead of one: the "gross return" (what you'd
-have earned, full stop, ignoring purification entirely) and the "net-of-purification return" (gross
-return minus the running liability) — so the cost of staying religiously honest is a visible number
-of its own, never a silent haircut baked invisibly into the portfolio's reported value.
+Structurally, Phase 7 is designed so that the honesty behavior isn't just a documented intention —
+it is close to impossible to accidentally violate in code. The function that renders a report,
+`render_report`, will not even let you call it without explicitly stating which caveats apply to
+this run — leave that argument out and Python itself refuses to run the program (`TypeError`), before
+a single number is ever formatted into HTML. This was a deliberate choice among two reasonable
+designs, discussed in §3 below; it means the "never show a number without its warning label" rule is
+enforced by the type checker and by Python's own function-call machinery, not merely by a programmer
+remembering to follow a convention.
 
-There is also a second, less obvious case Phase 6 handles: what about a stock that gets kicked out of
-the portfolio entirely because it stopped being halal (a "divestment")? Recall from Phase 5 that a
-flipped stock isn't sold immediately — it survives one more full rebalance period, untouched, before
-being forced out. During that grace window, the stock's price can move, and any price gain it made
-while it was already known to be non-compliant is itself something a scrupulous investor might not
-want to keep. Phase 6, when this feature is explicitly turned on (it ships switched off by default,
-since there's no settled scholarly formula for exactly how to handle this), tracks that price gain —
-from the day the stock flipped to the day it was finally sold — as a second kind of amount that would
-need to be purified, using the simplest defensible rule available: whatever the price went up by
-during that exact window, floored at zero (a price decline produces nothing to purify, since there's
-no income in a loss).
-
-What exists after Phase 6: the settled/disputed rule registry from Phase 1; the data-pulling
-pipeline from Phase 2; the typed local database from Phase 3; the working compliance screen from
-Phase 4; the working portfolio simulator with its flip-grace-divest discipline from Phase 5; and now,
-new this phase, a purification side-ledger that turns every Mixed-verdict dividend and (optionally)
-every forced divestment's price gain into an honestly-tracked liability, reported alongside — never
-folded silently into — the backtest's own gross portfolio value. Still no report or chart (that
-remains Phase 7's job) — Phase 6 only computes the numbers and prints a plain-text summary to the
-terminal.
+**Two things worth being just as explicit about now as every earlier phase's walkthrough was, and
+this is the single most important thing this final comprehension pass can say plainly.** First, the
+only "strategy" that ships is still the simplest possible one — split money equally across every
+compliant stock — presented as a reference implementation, not investment advice. Second, and by far
+the more important honesty note for the project as a whole: **the entire seven-phase pipeline
+described above genuinely works, and is genuinely tested — 406 tests pass, `mypy --strict` and
+`ruff` are both clean, and this pass personally generated a real HTML report from a real run of the
+real code and read its actual contents (§5 below) — but it has never once been run against real
+market data for real companies.** Every test, every fixture, every report this pass looked at is
+built from a small set of invented, obviously-fake ticker symbols (`ZZPURE01`, `ZZFLIP01`,
+`ZZMIXED_RATIODRIFT01`, and a dozen or so others like them) engineered specifically to exercise one
+mechanism each. **The single biggest remaining gap between "this runs" and "this produces a
+trustworthy real-world result" is the missing real ~100-company research** — the business-activity
+classifications a human being would actually have to look up, verify, and cite for real, named
+companies. That research does not exist anywhere in this repository, has never been started as part
+of any of the seven automated phases, and was never supposed to be — it was scoped, from Phase 4
+onward, as the project owner's own future work, entirely outside what an automated phase build does.
+Running `mizan report` against real tickers today would produce a real-looking, fully-caveated,
+handsomely-formatted HTML page — built on a generic SIC-code first-pass classification for each real
+company, not a verified one. The report's own honesty surface (the caveats banner, the fiqh register)
+is exactly the mechanism that would make this limitation visible to a reader if someone did that
+today; it does not make the limitation not exist.
 
 ## 2. Architecture walkthrough
 
-Everything below is a real file in the repository, read directly this pass.
+Everything below is a real file in the repository, confirmed present by direct listing this pass
+(`mizan/**/*.py`, read via `Glob`/`Read`, not assumed from any spec).
 
 ```
 mizan/
 ├── __init__.py                  # empty — marks mizan as a Python package
 ├── py.typed                     # empty marker file so type-checkers treat the package as typed
-├── config/
+├── config/                       # Phase 1 — untouched by every later phase's diff
 │   ├── __init__.py               # empty
 │   ├── invariants.py             # the 7 settled, non-negotiable rules (Invariants class + INVARIANTS singleton)
 │   ├── fiqh_params.py            # the 11-row disputed-judgment-call register (FiqhParams + FIQH_PARAMS singleton)
 │   └── boot_check.py             # startup checks that refuse to run if invariants.py or fiqh_params.py are broken
-├── core/
+├── core/                          # Phase 1 — untouched by every later phase's diff
 │   ├── __init__.py               # empty
 │   ├── base.py                   # MizanBaseModel — the one shared base every data model in the project must use
 │   ├── verdict.py                # Verdict — the three-state pass/partial/fail screening outcome (definition ONLY)
-│   └── caveats.py                # Caveat enum + ResultEnvelope — the mandatory warning-label wrapper for results
-├── data/
+│   └── caveats.py                # Caveat enum + ResultEnvelope — the mandatory warning-label wrapper for results;
+│                                  #  Phase 7's CAVEAT_DESCRIPTIONS and render_report's active_caveats parameter
+│                                  #  both key directly off this module's Caveat enum, unmodified by this phase
+├── data/                          # Phase 2/3 — untouched by Phase 4 through 7's diffs
 │   ├── __init__.py                # empty
 │   ├── models.py                  # raw wire-format row-shape schemas for EDGAR + Tiingo payloads (Phase 2)
 │   ├── raw_cache.py               # shared cache-path / cache-hit / atomic-write / read helpers, both legs (Phase 2)
@@ -148,772 +153,649 @@ mizan/
 │   ├── ingest_tiingo.py           # Tiingo client: request/symbol budget limiter, EOD fetch, anomaly scan (Phase 2)
 │   ├── db.py                      # DuckDB connection + idempotent schema creation (Phase 3)
 │   └── normalize.py               # typed row shapes + raw-cache-to-DuckDB mapping functions, incl. resolve_cik_offline (Phase 3)
-├── screening/                      # the whole package is Phase 4's, untouched by Phase 5's or Phase 6's diff
+├── screening/                      # Phase 4 — untouched by Phase 5 through 7's diffs
 │   ├── __init__.py                 # empty, package marker only
 │   ├── business_activity.py        # SIC-code first-pass tier classifier + pluggable, ships-empty override map
 │   ├── financial_ratios.py         # the 30/30/5 ratio arithmetic, pure functions over already-resolved floats
-│   └── verdict.py                  # screen(), the canonical entry point — Phase 5/6 both import and call this, neither edits it
-├── backtest/                       # Phase 5's package — untouched by Phase 6's diff (confirmed: none of
-│   │                                #  these five files appears in `git diff 9e989eb..9750a18 --stat`)
+│   └── verdict.py                  # screen(), the canonical entry point — Phase 5/6/7 all import and call this, none edits it
+├── backtest/                       # Phase 5 — untouched by Phase 6 or Phase 7's diffs
 │   ├── __init__.py                 # empty, package marker only
-│   ├── portfolio.py                # Holding/Portfolio models, valuation, split/dividend bookkeeping,
-│   │                                #  INVARIANTS.cash_yield read site (Phase 5)
-│   ├── strategy.py                 # Strategy Protocol + AllocationInstruction (Phase 5)
+│   ├── portfolio.py                # Holding/Portfolio models, valuation, split/dividend bookkeeping, INVARIANTS.cash_yield read site
+│   ├── strategy.py                 # Strategy Protocol + AllocationInstruction; EqualWeightStrategy, the one shipped reference strategy
 │   ├── compliance_state.py         # the flip→grace→divest state machine + DivestmentEvent/DividendEvent —
-│   │                                #  Phase 6 imports ComplianceStateRecord/DividendEvent from here, never edits it (Phase 5)
-│   └── clock.py                    # generate_rebalance_dates, step(), rebalance(), run_backtest() — Phase 6
-│                                    #  imports BacktestResult/DailySnapshot from here, never edits it (Phase 5);
+│   │                                #  Phase 6/7 both import ComplianceStateRecord/DividendEvent from here, neither edits it
+│   └── clock.py                    # generate_rebalance_dates, step(), rebalance(), run_backtest() — Phase 6/7 both
+│                                    #  import BacktestResult/DailySnapshot from here, neither edits it;
 │                                    #  `purification_ledger: dict[str, object] | None = None` field declaration
-│                                    #  is byte-for-byte unchanged this phase, confirmed by direct diff read
-├── purification/                   # NEW this phase — the whole package is new
-│   ├── __init__.py                 # NEW — empty, package marker only (mizan/backtest/__init__.py precedent)
-│   ├── ledger.py                   # NEW — DividendPurificationEntry/PurificationLedger models,
-│   │                                #        purify_dividend, purify_backtest_result — Fork A trigger +
-│   │                                #        Fork B side-ledger accrual (§3.1/§3.2/§4.1/§6a/§6c/§6d)
-│   └── attribution.py              # NEW — DivestmentPurificationEntry model,
-│                                    #        compute_divestment_attribution — Fork C forced-divestment
-│                                    #        price-appreciation attribution (§3.3/§4.2/§6b/§6c)
+│                                    #  is byte-for-byte unchanged since Phase 5, confirmed this pass by diff read
+├── purification/                   # Phase 6 — untouched by Phase 7's diff
+│   ├── __init__.py                 # empty, package marker only
+│   ├── ledger.py                   # DividendPurificationEntry/PurificationLedger models, purify_dividend,
+│   │                                #  purify_backtest_result — Fork A trigger + Fork B side-ledger accrual;
+│   │                                #  Phase 7's ReportInput/render_report/plots.py all consume PurificationLedger,
+│   │                                #  none edits this module
+│   └── attribution.py              # DivestmentPurificationEntry model, compute_divestment_attribution — Fork C
+│                                    #  forced-divestment price-appreciation attribution; also untouched by Phase 7
+├── reporting/                      # NEW this phase — the whole package is new (PHASE_7_SPEC.md §1)
+│   ├── __init__.py                 # NEW — empty, package marker only (mizan/purification/__init__.py precedent), 5 lines
+│   ├── report.py                   # NEW — 306 lines. ReportInput, CAVEAT_DESCRIPTIONS, render_report() and its six
+│   │                                #  section-rendering helpers (render_caveats_banner, render_fiqh_register,
+│   │                                #  render_return_summary, render_ticker_summary, render_purification_detail,
+│   │                                #  the private _render_plots_section) — THE canonical Phase 7 entry point
+│   └── plots.py                    # NEW — 131 lines. matplotlib.use("Agg") set at import time, then
+│                                    #  render_equity_curve_plot() and render_purification_by_ticker_plot(),
+│                                    #  each returning raw PNG bytes
 └── cli/
     ├── __init__.py                # empty
-    ├── main.py                    # `mizan` console-script entrypoint — boot-check-first dispatcher
-    │                               #  (untouched by Phase 6's diff — confirmed absent from the diff stat)
+    ├── main.py                    # `mizan` console-script entrypoint — boot-check-first dispatcher; MODIFIED
+    │                               #  this phase (additively): one new import, one new `report_cli.add_subparser(subparsers)`
+    │                               #  registration line — every other line byte-for-byte unchanged (confirmed by diff read)
     ├── ingest.py                  # the `ingest` subcommand (Phase 2, untouched this phase)
     ├── normalize.py               # the `normalize` subcommand (Phase 3, untouched this phase)
     ├── screen.py                  # the `screen` subcommand (Phase 4, untouched this phase)
-    └── backtest.py                # the `backtest` subcommand (Phase 5) — MODIFIED this phase, additively:
-                                    #  purification wired in as a post-processing pass (§4.3 below)
+    ├── backtest.py                # the `backtest` subcommand (Phase 5, modified additively by Phase 6; untouched by Phase 7 —
+    │                               #  confirmed absent from `git diff 6edb9b5..804b333 --stat`)
+    └── report.py                  # NEW this phase — 137 lines. the `report` subcommand, completing the
+                                    #  `ingest | screen | backtest | report` verb set MASTER_PRD.md §9.4 names
 tests/
 ├── __init__.py                   # empty
-├── test_invariants.py            # proves the boot check actually rejects a broken settled-rule config
-├── test_fiqh_params.py           # proves the 11-row register is complete, honest, and structurally sound
-├── test_core_types.py            # proves the shared base model, Verdict, and Caveat/ResultEnvelope behave as documented
-├── test_data_models.py           # proves every mizan/data/models.py schema parses/rejects as documented
-├── test_raw_cache.py             # proves cache_path/is_cached/write_raw_json/read_raw_json behave as documented
-├── test_ingest_edgar.py          # rate limiter timing, header contract, CIK resolution, HALT paths
-├── test_ingest_tiingo.py         # budget throttling, symbol-log drift, anomaly scan, token handling
-├── test_cli_ingest.py            # CLI arg parsing, boot-gate-first dispatch, per-ticker HALT/continue behaviour
-├── test_data_db.py               # schema idempotency, PRIMARY KEY enforcement, single-writer lock behaviour
-├── test_data_normalize.py        # unit-rejection, duplicate-guard, idempotent replay, column contract
-├── test_cli_normalize.py         # boot-gate-first behaviour, offline-only dispatch, exit codes
+├── (Phase 1–6's 24 test files, all untouched by this phase's diff — proving boot-gate rejection,
+│    fiqh-register completeness, cache idempotency, rate-limiter/budget timing, schema idempotency,
+│    unit rejection, screening verdicts, portfolio/strategy/compliance-state/clock behaviour, and
+│    every purification-ledger/attribution property Phase 6's own comprehension pass already
+│    catalogued in detail — see that phase's own entry in the Phase Log below for the full list)
 ├── fixtures/
 │   ├── __init__.py                 # package marker
-│   └── synthetic_universe.py       # MODIFIED this phase (additive only) — Phase 5's thirteen SYNTHETIC
-│                                    #  fixture tickers PLUS three new tickers added this phase:
-│                                    #  `ZZMIXED_RATIODRIFT01`, `ZZPURE_DIV01`, `ZZDIVEST_APPREC01` (§3/§4 below)
-├── test_screening_business_activity.py  # Phase 4, untouched
-├── test_screening_financial_ratios.py   # Phase 4, untouched
-├── test_screening_verdict.py             # Phase 4, untouched
-├── test_cli_screen.py                    # Phase 4, untouched
-├── test_backtest_portfolio.py            # Phase 5, untouched
-├── test_backtest_strategy.py             # Phase 5, untouched
-├── test_backtest_compliance_state.py     # Phase 5, untouched
-├── test_backtest_clock.py                # Phase 5, untouched
-├── test_cli_backtest.py                  # Phase 5's file — MODIFIED this phase (additive only): one new
-│                                          #  case, `test_run_prints_a_purified_dividend_line_for_a_mixed_
-│                                          #  dividend`, proving the CLI's new purification-summary stdout lines
-├── test_purification_ledger.py           # NEW this phase — 17 tests: the ratio-drift anti-undercount
-│                                          #  property, Pure-verdict zero-entry behaviour, the grace-window
-│                                          #  last-Mixed-ratio fallback, the Fork A/C `purify_capital_gains`
-│                                          #  gate, gross-vs-net-of-purification distinctness, lossless
-│                                          #  round-trip, "only purification_ledger changes" isolation, the
-│                                          #  dividend reconciliation pass, caller-`con`/`cache_dir` reuse,
-│                                          #  MizanBaseModel inheritance, and the four boundary/import greps
-│                                          #  restated as tests (no LLM import, no DB write, no `duckdb.connect`,
-│                                          #  no boundary-crossing word, no pandas/matplotlib/pyarrow import)
-└── test_purification_attribution.py      # NEW this phase — 7 tests: purified-amount arithmetic, the
-                                           #  price-decline-floors-at-zero rule, a flat-price zero-amount
-                                           #  entry (recorded, not omitted), the mismatched-dates
-                                           #  AssertionError guard, the flip<=divest model_validator in both
-                                           #  directions, MizanBaseModel inheritance
+│   └── synthetic_universe.py       # UNTOUCHED this phase (confirmed absent from the diff stat) — the same sixteen
+│                                    #  synthetic fixture tickers Phase 6 left it with; Phase 7 adds no new fixture
+│                                    #  ticker, needing none (PHASE_7_SPEC.md §8's own stated reason: every plot/table
+│                                    #  this phase renders is a presentation of data the existing fixture set already
+│                                    #  exercises)
+├── test_reporting_report.py       # NEW this phase — tests mizan/reporting/report.py directly
+├── test_reporting_plots.py        # NEW this phase — tests mizan/reporting/plots.py directly
+└── test_cli_report.py             # NEW this phase — tests mizan/cli/report.py and its wiring into mizan/cli/main.py;
+                                    #  561 lines, the largest of the three new test files, including the two real
+                                    #  end-to-end tests this pass re-ran independently (§5 below)
 .env.example                       # TIINGO_API_TOKEN placeholder template, never a real credential
-pyproject.toml                    # project metadata, exact dependency version pins, mypy/ruff/pytest config, CLI entry points (UNCHANGED this phase — confirmed absent from the diff stat)
-docs/modernization_log.md         # a running log of exactly which external tool/library versions and API contracts were verified and when (UNCHANGED this phase — Phase 6 verifies no new external-API field, per PHASE_6_SPEC.md §2.4)
-.gitignore                        # unchanged this phase
-PHASE_5_SPEC.md                   # the Phase 5 build contract (1070 lines), untouched this phase
-PHASE_6_SPEC.md                   # NEW this phase — the Phase 6 build contract (886 lines)
+pyproject.toml                     # MODIFIED this phase: matplotlib==3.11.1 promoted from the now-removed
+                                    #  [project.optional-dependencies].report group into [project.dependencies];
+                                    #  one new [[tool.mypy.overrides]] block for module = "numpy.*" (§3 below)
+docs/modernization_log.md          # MODIFIED this phase: one new dated (2026-08-31) entry, §6.2c, logging the
+                                    #  live re-verification of matplotlib's pin ahead of its promotion to a real dependency
+.gitignore                         # unchanged this phase
+PHASE_1_SPEC.md … PHASE_6_SPEC.md  # unchanged this phase, prior phases' build contracts
+PHASE_7_SPEC.md                    # NEW this phase — the Phase 7 build contract (818 lines), read in full this pass
 ```
 
-**How the Phase 6 pieces connect, confirmed by direct read of every file this pass:**
+**Confirmed this pass, directly, not merely asserted:** `git diff 6edb9b5..804b333 --stat` (Phase 6's
+own review-approval commit to Phase 7's implementation commit) touches exactly twelve files:
+`COMPREHENSION.md` (Phase 6's own comprehension pass, superseded by this document), `PHASE_7_SPEC.md`
+(new), `docs/modernization_log.md`, `mizan/cli/main.py`, `mizan/cli/report.py` (new),
+`mizan/reporting/__init__.py` (new), `mizan/reporting/plots.py` (new), `mizan/reporting/report.py`
+(new), `pyproject.toml`, `tests/test_cli_report.py` (new), `tests/test_reporting_plots.py` (new),
+`tests/test_reporting_report.py` (new) — a total of +3,054/−162 lines. **No file under
+`mizan/config/`, `mizan/core/`, `mizan/data/`, `mizan/screening/`, `mizan/backtest/`, or
+`mizan/purification/` appears anywhere in that diff** — Phase 7 is a pure, read-only consumer of
+every one of those packages' public surfaces (`BacktestResult`/`DailySnapshot` from `backtest/clock.py`,
+`ComplianceStateRecord` from `backtest/compliance_state.py`, `PurificationLedger`/
+`DividendPurificationEntry` from `purification/ledger.py`, `DivestmentPurificationEntry` from
+`purification/attribution.py`, `FiqhParams`/`FIQH_PARAMS` from `config/fiqh_params.py`, `Caveat` from
+`core/caveats.py`, `MizanBaseModel` from `core/base.py`), exactly as `PHASE_7_SPEC.md` §1 states this
+phase's own posture to be — stricter than every prior phase since Phase 3, each of which modified at
+least one earlier phase's file additively; Phase 7 modifies none.
 
-- **`mizan/purification/ledger.py`** (382 lines) defines two frozen `MizanBaseModel` subclasses —
-  `DividendPurificationEntry` (`ticker`, `cik`, `ex_date`, `ratio_used: float = Field(ge=0.0)`,
-  `ratio_as_of_date`, `dividend_cash_received: float = Field(ge=0.0)`, `purified_amount: float =
-  Field(ge=0.0)`) and `PurificationLedger` (`dividend_entries`, `divestment_entries` — the latter
-  imported from `attribution.py`, a one-way, non-circular import — `purification_liability: float =
-  Field(ge=0.0)`, `gross_return: float`, `net_of_purification_return: float`) — plus the module's
-  three private helpers (`_pinned_verdict_observation`, `_most_recent_prior_mixed_observation`,
-  `_ratio_from_screen`, `_compute_returns`) and its two public functions. `purify_dividend` (lines
-  187–282) pins the `VerdictObservation` in `compliance_state.verdict_history` with the largest
-  `as_of_date <= ex_date`, asserts it matches `DividendEvent.verdict_at_ex_date` (an `AssertionError`
-  otherwise — a Phase-6-mis-derived-the-pin guard, not a Phase-5-correctness check), and branches
-  three ways on the pinned verdict: `PURE` returns `None` (no entry at all); `MIXED` re-invokes
-  `mizan.screening.verdict.screen(ticker, ratio_as_of_date, ...)`, reads `non_permissible_income_
-  ratio.actual_value` off the returned `ScreeningVerdict.reason_trace`, and returns an entry with
-  `purified_amount = ratio_used * dividend_event.cash_received`; `NON_COMPLIANT` (a dividend paid
-  during a ticker's grace window) walks `verdict_history` backwards to the most recent strictly-prior
-  `MIXED` observation and re-derives its ratio instead, or returns `None` if that prior observation
-  was `PURE`. `purify_backtest_result` (lines 306–382) is the module's canonical entry point: loops
-  `result.dividend_events` calling `purify_dividend`, loops `result.divestment_events` calling
-  `compute_divestment_attribution` only `if fiqh_params.purify_capital_gains.value`, sums both entry
-  sets into `purification_liability`, computes `gross_return`/`net_of_purification_return` via
-  `_compute_returns` (which returns `(0.0, 0.0)` for an empty `daily_snapshots`, §6 below), and
-  returns `result.model_copy(update={"purification_ledger": ledger.model_dump()})` — the original
-  `BacktestResult` is never mutated in place.
-- **`mizan/purification/attribution.py`** (160 lines) defines `DivestmentPurificationEntry` (`ticker`,
-  `cik`, `flip_date`, `divest_date`, `quantity_liquidated: float = Field(ge=0.0)`, `price_at_flip:
-  float = Field(ge=0.0)`, `price_at_divest: float = Field(ge=0.0)`, `purified_amount: float =
-  Field(ge=0.0)`), whose `model_validator(mode="after")` raises `ValueError` if `flip_date >
-  divest_date`. `compute_divestment_attribution` (lines 95–160) asserts `compliance_states[event.
-  ticker].flip_date == event.flip_date and .divest_date == event.divest_date` (`AssertionError`
-  otherwise), finds the `DailySnapshot` with `as_of_date == event.flip_date` and reads
-  `holdings[event.ticker]` as `quantity_liquidated` (never re-queried from a live `Portfolio`, which
-  this module never holds a reference to), queries `price_bars.raw_close` for both `flip_date` and
-  `divest_date` via a private `_raw_close_on` helper (one `SELECT ... WHERE ticker = ? AND
-  trade_date = ?` per call, raising a plain `LookupError` — not defaulting to `0.0` — if no row
-  exists), and computes `purified_amount = max(0.0, quantity_liquidated * (price_at_divest -
-  price_at_flip))`.
-- **`mizan/cli/backtest.py`** gained two new imports (`from mizan.config.fiqh_params import
-  FIQH_PARAMS`; `from mizan.purification.ledger import PurificationLedger, purify_backtest_result`)
-  and, inside `run()`'s existing `try` block (still inside the `with db.connect(...) as con:`
-  context manager, `con` still open and still read-only), the `BacktestResult.model_validate(...)`
-  call PLUS a new `purify_backtest_result(result, con=con, cache_dir=args.cache_dir,
-  overrides=overrides, fiqh_params=FIQH_PARAMS)` call — reusing the exact same `con`/`args.cache_dir`/
-  `overrides` local variables `run_backtest(...)` was already called with a few lines above. After
-  the `with` block exits, six new `print(...)` lines are appended after the existing
-  DIVESTED/DIVIDENDS summary loops: purification liability, gross return, net-of-purification return,
-  one `PURIFIED DIVIDEND` line per `ledger.dividend_entries`, and one `PURIFIED DIVIDEND` line per
-  `ledger.divestment_entries`. Every pre-existing line in the file is byte-for-byte unchanged
-  (confirmed by direct diff read) — this is a strictly additive modification, exactly as
-  `PHASE_6_SPEC.md` §1 specified.
-- **`tests/fixtures/synthetic_universe.py`** gained one new defaulted field on `PriceBarFixture`
-  (`div_cash: float = 0.0`) and three new tickers appended to `ALL_SYNTHETIC_TICKERS`:
-  `ZZMIXED_RATIODRIFT01` (CIK `9990000014` — a Mixed-verdict ticker whose
-  `non_permissible_income_ratio` drifts 2% → 4% between rebalance 1 and rebalance 2 via the same
-  two-facts-same-tag-different-`filed`-dates mechanism `ZZLOOKAHEAD01`/`ZZFLIP01` already established,
-  now applied to `InvestmentIncomeInterest`; carries two nonzero `div_cash` price-bar days straddling
-  the ratio-drift boundary, one purified at 2%, one at 4%), `ZZPURE_DIV01` (CIK `9990000016` — a
-  Pure-verdict ticker distinct from the existing, unmodified `ZZPURE01`, that pays one dividend, used
-  to prove a Pure dividend produces zero ledger entries, not a zero-amount one), and
-  `ZZDIVEST_APPREC01` (CIK `9990000015` — structurally identical to `ZZFLIP01`'s debt-fact-drift flip/
-  divest mechanism, but with `raw_close` rising `100.0 → 130.0` across the non-compliant window,
-  giving Fork C a genuine nonzero appreciation to attribute; `ZZFLIP01` itself is untouched, its own
-  four price bars still flat at `100.0`). The one line inside `load_into_duckdb` that previously
-  hardcoded `div_cash` as a literal `0.0` in every inserted `price_bars` row now reads `bar.div_cash`
-  instead — the single, minimal, additive change needed for the new fixtures' nonzero dividend days to
-  actually reach the database Phase 4/5's own already-approved fixture rows are otherwise untouched by
-  (confirmed: every Phase 4/5 fixture's `div_cash` stays `0.0`, since `PriceBarFixture`'s new field
-  defaults to `0.0` and none of their own definitions sets it).
-- `pyproject.toml`, `docs/modernization_log.md`, and `.gitignore` are all unmodified by this phase —
-  confirmed absent from the diff stat; Phase 6 adds zero new third-party dependencies and verifies no
-  new external-API field beyond what Phase 5's own `docs/modernization_log.md` §6.2/§6.2b already
-  logged (`price_bars.div_cash`/Tiingo's `divCash`, `price_bars.raw_close`).
+**How the Phase 7 pieces connect, confirmed by direct read of every file this pass:**
 
-**Phase 1–5 architecture, carried forward unchanged (re-confirmed this pass by diff, not re-read file
+- **`mizan/reporting/report.py`** defines `ReportInput` (a `MizanBaseModel` wrapping
+  `backtest_result: BacktestResult` and `fiqh_params: FiqhParams`, with a `model_validator(mode="after")`
+  that raises `ValueError` if `backtest_result.purification_ledger is None` — refusing to construct a
+  report input from a raw, pre-purification `run_backtest()` result), the module-level
+  `CAVEAT_DESCRIPTIONS: dict[Caveat, str]` registry (one full-sentence description per `Caveat` member,
+  completeness-asserted against `set(Caveat)` at import time — an `AssertionError` on
+  `import mizan.reporting.report` if a future `Caveat` member is ever added without a matching
+  description here), and six rendering functions: `render_caveats_banner`, `render_fiqh_register`
+  (asserts exactly 11 rows, `AssertionError` otherwise), `render_return_summary`, `render_ticker_summary`,
+  `render_purification_detail`, and the private `_render_plots_section` (base64-encodes both PNGs via
+  `base64.b64encode(...).decode("ascii")` into `data:image/png;base64,...` `<img src>` values). All six
+  are composed, in this fixed order, by `render_report(data: ReportInput, *, active_caveats:
+  tuple[Caveat, ...]) -> str` (lines 269–305) — the module's own canonical entry point, returning one
+  complete `<!DOCTYPE html>` document as a `str`. Every dynamic value interpolated anywhere in the
+  module passes through a private `_escape` helper (`html.escape(value, quote=False)`, lines 31–39) —
+  see §3 below for why `quote=False` is a deliberate, reasoned choice, not an oversight.
+- **`mizan/reporting/plots.py`** calls `matplotlib.use("Agg")` (line 19) before importing `pyplot`
+  (line 21) — at module import time, before any figure is ever created — then defines
+  `render_equity_curve_plot(daily_snapshots, ledger) -> bytes` and
+  `render_purification_by_ticker_plot(ledger) -> bytes`. Both build a `matplotlib` figure, branch
+  explicitly on the empty-input case (rendering an annotated "No trading days in this backtest
+  window."/"No purification liability in this run." placeholder figure rather than raising or
+  indexing into an empty sequence), write to an in-memory `io.BytesIO()` buffer via
+  `figure.savefig(buffer, format="png")`, call `plt.close(figure)` (to avoid matplotlib's own
+  figure-object accumulation across repeated calls within one process — relevant because a test suite
+  calling these functions dozens of times must not leak figures, confirmed by a private helper,
+  `_cumulative_purification_liability_as_of`, lines 30–42, that reconstructs the day-by-day running
+  purification-liability series privately and freshly on every call — never a persisted intermediate,
+  exactly matching `PHASE_6_SPEC.md` §6d's own explicit anticipation that this reconstruction would be
+  "squarely Phase 7's reporting concern"), and return `buffer.getvalue()`.
+- **`mizan/cli/report.py`** registers the `report` subcommand (`add_subparser`, flag set identical to
+  `mizan backtest`'s own through `--overrides-path`, plus one new `--output-path` flag — no
+  `--no-plots` suppression flag exists anywhere, deliberately, per PHASE_7_SPEC.md §9). `run(args)`
+  opens one read-only DuckDB connection (`db.connect(args.db_path, read_only=True)`), loads the
+  override map, and — still inside that connection's `with` block — calls `run_backtest(...)` then
+  `purify_backtest_result(...)`, reusing the exact same `con`/`args.cache_dir`/`overrides` local
+  variables across both calls (the same discipline Phase 6's `mizan/cli/backtest.py` already
+  established, and the same connection-lifetime lesson Phase 6's own comprehension pass flagged as a
+  standing note for future spec authors — heeded here: this phase's spec's own pseudocode already
+  placed the construction correctly inside the `with` block, and the shipped code follows it exactly,
+  confirmed by direct read), then constructs `ReportInput(backtest_result=result,
+  fiqh_params=FIQH_PARAMS)` and calls `render_report(report_input,
+  active_caveats=envelope.active_caveats)` — reusing `run_backtest`'s own returned
+  `envelope.active_caveats` tuple verbatim, never inventing a fresh caveat set. Writes the returned
+  HTML `str` to `args.output_path` via `Path.write_text(..., encoding="utf-8")`, prints the output path
+  and final portfolio value, returns `0`. Catches the same four per-ticker/whole-backtest-shaped
+  exceptions `mizan backtest` catches (`CikResolutionError`, `SicResolutionError`,
+  `NotNormalizedError`, `InsufficientDataError`), printing `HALT: ...` to stderr and returning `1`.
+- **`mizan/cli/main.py`** gained one new import (`from mizan.cli import report as report_cli`) and one
+  new registration line (`report_cli.add_subparser(subparsers)`) — confirmed by direct diff read;
+  every other line, including the boot-check-first dispatch that has run unchanged since Phase 2, is
+  byte-for-byte identical to Phase 6's own version. `mizan --help` now lists all four verbs:
+  `ingest`, `screen`, `backtest`, `report` — the complete `cli/` verb set `MASTER_PRD.md` §9.4's own
+  module-boundary diagram names, confirmed complete this pass by running `mizan --help` directly (via
+  `python -m mizan.cli.main` inside `.venv`, §5 below).
+- **`pyproject.toml`** — `matplotlib==3.11.1` moved from `[project.optional-dependencies].report`
+  (now-removed entirely) into `[project.dependencies]`; one new `[[tool.mypy.overrides]]` block
+  (`module = "numpy.*"`, `follow_imports = "skip"`, `follow_imports_for_stubs = true`) added directly
+  beneath the pre-existing `pyarrow.*` override. Both changes confirmed by direct diff read (§3 below
+  for the reasoning and this pass's own independent empirical verification of the mypy override).
+- **`docs/modernization_log.md`** gained one new dated entry, §6.2c (2026-08-31): a live re-fetch of
+  `https://pypi.org/project/matplotlib/` confirming the pin stays exactly `3.11.1` (uploaded
+  2026-07-18, unchanged from the prior day's Step-10 pass) — logged because this is the pin's first
+  *load-bearing* verification (matplotlib had been forward-declared, unused, since Phase 1; this is
+  the first phase that actually imports it).
+
+**Phase 1–6 architecture, carried forward unchanged (re-confirmed this pass by diff, not re-read file
 by file since the owning code is untouched):** `mizan/config/`, `mizan/core/`, `mizan/data/`,
-`mizan/screening/`, and every file under `mizan/backtest/` do not appear in `git diff
-9e989eb..9750a18 --stat` at all — Phase 6 is a read-only consumer of `screen()`, `BacktestResult`,
-`ComplianceStateRecord`, and the Phase 1 config singletons, exactly the same posture Phase 5 held
-toward Phase 4's `screen()` and Phase 3's `db.connect()`.
-
-**Phase 5 architecture detail, carried forward for reference below (files untouched this phase, so
-the description Phase 5's own comprehension pass gave remains accurate):**
-
-- **`mizan/backtest/portfolio.py`** (159 lines) defines `Holding` (`ticker: str`, `quantity: float =
-  Field(ge=0.0)` — negative quantity, i.e. a short position, is rejected at construction, not by a
-  runtime `if`) and `Portfolio` (`cash: float = Field(ge=0.0)`, `holdings: dict[str, Holding]`), both
-  `MizanBaseModel` subclasses (frozen — every function returns a new object rather than mutating).
-  `apply_cash_yield` multiplies cash by `(1.0 + INVARIANTS.cash_yield)`, reading `INVARIANTS`
-  directly inside the function body rather than accepting it as a parameter or hardcoding `0.0` a
-  second time — a structural no-op today (`cash_yield` is permanently `0.0`) expressed as a genuine
-  config read rather than an assumption. `apply_split(holding, split_factor)` multiplies `quantity`
-  by `split_factor` (see §4 below for the verified direction). `mark_to_market` sums
-  `cash + Σ(quantity × prices[ticker])` over caller-supplied `prices`, doing no DB I/O itself.
-  `credit_dividend` adds `div_cash_per_share × quantity` to cash, a no-op (not an error) if the
-  ticker isn't currently held. `apply_allocation(portfolio, instruction, prices)` computes each
-  target ticker's `target_value = weight × mark_to_market(...)`, converts to a target quantity,
-  liquidates any currently-held ticker absent from `instruction.target_weights`, and floors the
-  resulting cash at `0.0` as a defensive guard against sub-cent floating-point noise (see §3 below).
-- **`mizan/backtest/strategy.py`** (116 lines) defines `AllocationInstruction` (`target_weights:
-  dict[str, float]`), whose own `model_validator` rejects any weight outside `[0.0, 1.0]` and any
-  weight-sum above `1.0 + 1e-9` — making leverage and shorting structurally impossible at
-  construction time, independent of `INVARIANTS`. `Strategy` is a `Protocol` with one method,
-  `select(*, as_of_date, compliant_tickers: frozenset[str], portfolio: Portfolio) ->
-  AllocationInstruction`. `StrategyContractViolationError` is the backstop raised if a `select()`
-  implementation names a ticker outside `compliant_tickers`. `EqualWeightStrategy` is the one
-  concrete, shipped implementation — equal-weights every compliant ticker, or all-cash if none are
-  compliant — used by both this phase's own tests and the `backtest` CLI, explicitly not presented
-  as a real research strategy.
-- **`mizan/backtest/compliance_state.py`** (220 lines) defines `HoldingComplianceState` (a `StrEnum`:
-  `HELD_COMPLIANT`, `HELD_NONCOMPLIANT_GRACE`, `DIVESTED`), `VerdictObservation`,
-  `ComplianceStateRecord` (per-ticker: `state`, `flip_date`, `divest_date`,
-  `grace_rebalances_remaining`, and the append-only `verdict_history`), `DivestmentEvent`, and
-  `DividendEvent`. The pure function `transition(record, *, ticker, cik, as_of_date, new_verdict,
-  fiqh_params=FIQH_PARAMS)` implements the state table (see §4 below) and is the single place the
-  grace countdown and the "no un-flip edge" rule live.
-- **`mizan/backtest/clock.py`** (422 lines) defines `DailySnapshot` and `BacktestResult` (the
-  latter's `purification_ledger: dict[str, object] | None = None` field is a deliberate loose
-  placeholder for Phase 6, always left `None` by Phase 5 itself). `generate_rebalance_dates(start,
-  end)` is a pure function returning `start_date` plus the first day of every subsequent calendar-
-  quarter-boundary month (`_REBALANCE_MONTHS = (1, 4, 7, 10)`, a module-level hardcoded tuple — see
-  §3/§4 below for why this can never be made configurable). `step()` advances a portfolio one
-  trading day with no trading and no re-screening (split adjustment + the cash-yield no-op only).
-  `rebalance()` is where the flip/grace/divest mechanic and the strategy call actually happen (see
-  §3 below for the frozen/workable partition this function implements). `run_backtest(*, tickers,
-  start_date, end_date, initial_cash, strategy, con, cache_dir, overrides=None,
-  fiqh_params=FIQH_PARAMS)` is the canonical entry point: iterates every real trading day present in
-  `price_bars` for the given tickers, applying `step()` and dividend crediting every day and
-  `rebalance()` on rebalance dates, and returns `ResultEnvelope(active_caveats=(Caveat.
-  LOOK_AHEAD_BIAS, Caveat.SURVIVORSHIP_BIAS, Caveat.PENDING_SCHOLARLY_VERIFICATION),
-  payload=BacktestResult(...).model_dump())`. It imports `mizan.screening.verdict` as a module
-  (`from mizan.screening import verdict as screening_verdict`), not as a bare `screen` name — see §3
-  below for why this specific import shape is load-bearing, not stylistic.
-- **`mizan/cli/backtest.py`** (130 lines) registers `backtest --ticker TICKER [--ticker TICKER ...]
-  --start-date --end-date --initial-cash --db-path --cache-dir [--overrides-path]`. There is
-  deliberately no `--rebalance-frequency` flag anywhere on this subcommand, mirroring
-  `clock.py`'s own hardcoded `_REBALANCE_MONTHS`. `run()` opens one read-only DuckDB connection
-  (`backtest` never writes to DuckDB), loads the override map, constructs `EqualWeightStrategy()`,
-  calls `run_backtest`, and prints final portfolio value, every `DivestmentEvent`, and every
-  ticker's total dividend cash received to stdout — catching the same per-ticker-shaped exceptions
-  `mizan screen` catches (`CikResolutionError`/`SicResolutionError`/`NotNormalizedError`/
-  `InsufficientDataError`), but at the whole-backtest level: one halting exception anywhere aborts
-  the entire run rather than continuing with a partial universe, since a backtest's tickers are not
-  independent of each other the way a screening batch's are.
-- **`mizan/cli/main.py`** gained one new import (`from mizan.cli import backtest as backtest_cli`)
-  and one new registration line (`backtest_cli.add_subparser(subparsers)`) — confirmed by reading the
-  diff; `main()`'s boot-check-first dispatch is otherwise unchanged, so `mizan backtest` also halts
-  before any simulation logic runs if the Phase 1 foundation is broken. `run_backtest` itself does
-  not re-run the boot check — it relies on this centralized, already-existing gate running before
-  any subcommand dispatches.
-- **`tests/fixtures/synthetic_universe.py`** gained one new ticker, `ZZFLIP01` (CIK `9990000013`),
-  appended to `ALL_SYNTHETIC_TICKERS` — nothing existing in the file was changed (confirmed: every
-  Phase 4 ticker definition is byte-identical in this pass's read). `ZZFLIP01` carries two
-  `LongTermDebtNoncurrent` facts under the same tag, filed on different dates (`0.0` debt filed
-  2025-06-01; `50,000,000.0` debt filed 2026-02-01) plus four price bars on each 2026 calendar-
-  quarter boundary — engineered so `screen(..., as_of_date=date(2026,1,1))` sees only the early
-  (0.0-debt) fact and returns `Verdict.PURE`, while `screen()` at `2026-04-01` or any later date sees
-  the second fact and returns `Verdict.NON_COMPLIANT` — a real, time-varying `screen()` result, not a
-  fixture rigged to a single permanent verdict. This is the worked example `test_backtest_clock.py`
-  runs its end-to-end flip→grace→divest assertions against.
-- `pyproject.toml` is unmodified by this phase — confirmed absent from the diff stat; Phase 5 adds
-  zero new third-party dependencies.
-- `docs/modernization_log.md` gained one new dated (2026-08-31) entry, §6.2b, read in full this pass:
-  a live re-fetch of Tiingo's own splits documentation resolving the one build-time verification item
-  `PHASE_5_SPEC.md` §0.1 flagged rather than guessed — see §4 below.
-- `.gitignore` gained one line (`.coverage`), added in the small standalone housekeeping commit
-  `4559e0e` between Phase 4's comprehension pass and Phase 5's technical blueprint — not part of
-  Phase 5's own implementation diff, noted here only for completeness since it appears in the
-  `d70b29d..3f9ccc6` diff range this pass was asked to read.
+`mizan/screening/`, every file under `mizan/backtest/`, and every file under `mizan/purification/` do
+not appear in `git diff 6edb9b5..804b333 --stat` at all. `mizan/cli/backtest.py`, `mizan/cli/screen.py`,
+`mizan/cli/ingest.py`, and `mizan/cli/normalize.py` likewise do not appear. The detailed per-file
+architecture descriptions Phase 5's and Phase 6's own comprehension passes already gave for
+`mizan/backtest/portfolio.py`, `strategy.py`, `compliance_state.py`, `clock.py`,
+`mizan/purification/ledger.py`, `attribution.py`, and `mizan/cli/backtest.py` remain accurate without
+re-derivation — see the Phase Log below for the phase-by-phase summaries, and §3/§4 below for the
+domain-mechanics and decision content still worth restating in this final combined pass.
 
 ## 3. Decisions and tradeoffs
+
+This section is long by now, spanning seven phases — grouped by phase below, per the operator note
+in Phase 6's own version of this document, since nothing here has been overturned, only added to.
 
 **Carried forward from Phase 1 (still shipped, not overturned by any later phase):**
 
 - `FiqhParam` remains generic (`FiqhParam[T]`), not a `bool | float | str` union.
 - `check_invariants()` / `check_fiqh_register()` remain hand-written, field-by-field checks.
-- `StrEnum` remains the pattern for every enum in the project, including Phase 5's new
-  `HoldingComplianceState` — confirmed by direct read of its definition.
+- `StrEnum` remains the pattern for every enum in the project, from Phase 5's `HoldingComplianceState`
+  through Phase 7's own use of `Caveat` (unmodified, still a `StrEnum`, confirmed by direct read of
+  `mizan/core/caveats.py` this pass).
 
-**Carried forward from Phase 2/3/4 (still shipped, not overturned by Phase 5 or Phase 6):**
+**Carried forward from Phase 2/3/4 (still shipped, not overturned by any later phase):**
 
 - DuckDB's single-writer lock, the dedup-then-insert-with-backstop pattern, and the closed
   `RECOGNIZED_XBRL_UNITS` allow-list are all unaffected — `mizan/data/db.py` and
-  `mizan/data/normalize.py` are both untouched by Phase 5's or Phase 6's diff.
-- The Phase 2/3 `# noqa: N812` findings on the `_Date` alias remain exactly two files
-  (`mizan/data/models.py`, `mizan/data/normalize.py`), plus the one Phase 4 added
-  (`mizan/screening/verdict.py`) — confirmed this run: `grep -rn "noqa" mizan/` still surfaces
-  exactly these three `# noqa: N812` hits (plus `models.py`'s unrelated `N815` wire-format
-  suppressions). Neither Phase 5's nor Phase 6's new code (`mizan/backtest/`, `mizan/purification/`,
-  `mizan/cli/backtest.py`) introduces **any** new `noqa` suppression anywhere.
+  `mizan/data/normalize.py` are untouched since Phase 3.
+- The Phase 2/3/4 `# noqa: N812` findings on the `_Date` alias remain exactly three files
+  (`mizan/data/models.py`, `mizan/data/normalize.py`, `mizan/screening/verdict.py`) — confirmed this
+  run: `grep -rn "noqa" mizan/` still surfaces exactly these three hits plus `models.py`'s unrelated
+  `N815` wire-format suppressions. **Phase 7's new code introduces zero new `noqa` suppression
+  anywhere** — confirmed by the same grep, run fresh against the full tree this pass.
 - The real ~100-ticker universe and its hand-verified activity map still do not exist — restated
-  prominently in §6 below, carried unchanged from Phase 4's own open item.
+  prominently in §1 and §6 below, carried unchanged since Phase 4's own open item.
 
-**Carried forward from Phase 5 (still shipped, not overturned by Phase 6 — re-confirmed this run
-since no file under `mizan/backtest/` appears in `git diff 9e989eb..9750a18 --stat`):**
+**Carried forward from Phase 5 (still shipped, not overturned by Phase 6 or Phase 7):**
 
-- **The frozen/workable portfolio partition — the mechanism that actually makes the grace period
-  work, and the single most important design decision in this phase.** A naive implementation of
-  "re-screen everything, then just hand the whole portfolio to the strategy and apply whatever it
-  returns" would silently defeat the grace-period mechanic on its very first non-compliant
-  rebalance: `Strategy.select()`'s own structural contract (§3.2) makes it *impossible* to name a
-  non-compliant ticker in `AllocationInstruction.target_weights` (a conforming strategy is only ever
-  handed `compliant_tickers`, which never includes a `NON_COMPLIANT` verdict), and
-  `apply_allocation` fully liquidates any currently-held ticker that is *absent* from
-  `target_weights`. Put those two true, individually-correct rules together naively and a stock that
-  just flipped to non-compliant is both un-nameable by the strategy AND therefore immediately sold —
-  at the very rebalance the flip is detected, one full grace period too early. `rebalance()`
-  (`mizan/backtest/clock.py` lines 269–277, read directly this pass) avoids this by partitioning the
-  post-divestment portfolio in two before ever consulting the strategy: every ticker currently in
-  `HELD_NONCOMPLIANT_GRACE` goes into a **frozen** dict, held back entirely; everything else (cash +
-  every other holding) becomes the **workable** portfolio actually shown to `strategy.select()` and
-  passed through `apply_allocation`. The frozen holdings are merged back into the final portfolio
-  completely untouched — same quantity, no cash flow — after the strategy has acted. **Tradeoff:**
-  this makes `rebalance()` itself noticeably more complex than "screen, then delegate to strategy,
-  then apply" would have been, and it means a grace-period holding is invisible to the strategy even
-  as a candidate for the strategy's own risk logic (a strategy cannot, for example, choose to shrink
-  a grace holding early) — but the alternative is a silent, structural violation of the state
-  machine `MASTER_PRD.md` §7.3 itself specifies (a state diagram with no edge back out of
-  `HELD_NONCOMPLIANT_GRACE` except via the grace countdown), which the shipped design gets right
-  without weakening `apply_allocation`'s own liquidate-if-absent contract for any other ticker.
-- **`mizan.screening.verdict` is imported as a module (`from mizan.screening import verdict as
-  screening_verdict`), never as `from mizan.screening.verdict import screen`.** Confirmed by direct
-  read of `clock.py`'s own top-of-file docstring and import block, and confirmed the reason is real
-  by reading `test_backtest_clock.py`'s own call-counting test
-  (`test_every_holding_is_rescreened_every_rebalance`, lines ~326–353): the test wraps
-  `screening_verdict_module.screen` via `monkeypatch.setattr(screening_verdict_module, "screen",
-  _counting_screen)` and asserts `call_count == len(universe) * len(rebalance_dates)`. Had
-  `clock.py` imported the bare name `screen` at module load time, its own local reference would be
-  bound to the original function object permanently — a later `monkeypatch.setattr` on the module's
-  own attribute would never be visible to code that already holds the original object, and the test
-  would silently under-count (or not detect a regression where re-screening is accidentally skipped
-  for some holdings). **Tradeoff:** every call site inside `clock.py` is one token longer
-  (`screening_verdict.screen(...)` vs. `screen(...)`) purely to keep this specific test meaningful —
-  a small, deliberate verbosity cost paid for testability of the re-screen-everything guarantee,
-  which is itself the guarantee arXiv:2608.12634's already-logged finding (boundary proximity
-  predicts screen transitions) motivates.
-- **`PHASE_5_SPEC.md` itself has a genuine, real gap this run found: it references "§6e" nine times
-  (lines 31, 67, 97, 116, 307, 537, 945, 947, 1035) but the document contains no actual `## 6e` or
-  `### 6e` section anywhere** (confirmed: `grep -n "^#.*6e"` against the full 1070-line file returns
-  nothing). Every one of those nine references reads naturally as "see §6e for the worked
-  fixture-ticker example," but there is nothing at that anchor to see. The executor therefore had to
-  design the `ZZFLIP01` fixture (two same-tag facts filed on different dates, engineered to flip
-  verdicts across a real `screen()` call at different `as_of_date`s — see §2/§4) from the spec's
-  surrounding prose and cross-references alone, without a literal table or worked-example block to
-  copy. **How the design was verified sound despite the missing section:** the fixture reuses,
-  verbatim, the *same* mechanism `ZZLOOKAHEAD01` (a Phase 4 fixture, unmodified) already
-  established and already had passing tests for — two facts under one tag, filed on different dates,
-  with `screen()`'s own point-in-time resolution ("most-recently-filed fact with `filed <=
-  as_of_date`") picking whichever one is visible as of a given date. Because that resolution
-  mechanism was already proven correct by Phase 4's own approved tests, extending it to a second,
-  later `as_of_date` boundary (rather than a single look-ahead boundary) required no new,
-  unverified assumption about `screen()`'s own behavior — only a new arrangement of already-trusted
-  primitives. `test_backtest_clock.py`'s own end-to-end assertions (PURE at 2026-01-01,
-  NON_COMPLIANT at 2026-04-01 and every later rebalance date) then closed the loop empirically.
-  **Tradeoff/finding, stated plainly:** this is a real spec-completeness gap (see §5 below) — a
-  future reader skimming `PHASE_5_SPEC.md` for "§6e" will hit nine dead cross-references — but it did
-  not block or degrade this phase's own build, because the executor had a sound, already-verified
-  fallback pattern to build from rather than needing to invent one from scratch.
-- **`apply_allocation`'s cash floor (`cash = max(cash, 0.0)`, `mizan/backtest/portfolio.py` line
-  157) is a floating-point-noise guard, not a relaxation of the non-negative-cash invariant.**
-  `AllocationInstruction`'s own validator already forbids `target_weights` summing above `1.0 +
-  1e-9` at construction time — upstream of, and independent from, this function. Given that
-  tolerance, the true mathematical floor for `cash` after `apply_allocation` is `-1e-9 ×
-  total_value`, which for a large enough portfolio can exceed ordinary `float` rounding noise even
-  though the allocation itself was legitimate. The floor clamps only that razor-thin,
-  tolerance-induced negative residue back to exactly `0.0` — it can never mask a genuine
-  over-allocation, because the validator already rejects any instruction that could produce a real
-  (non-tolerance-sized) cash deficit before `apply_allocation` is ever called. **Tradeoff:** a
-  defensive `max()` call that is dead code for every realistic portfolio size is still one more
-  line a reader has to reason about to convince themselves it is not silently hiding a bug — the
-  shipped code's own docstring carries the exact reasoning above precisely so a future reader does
-  not have to re-derive it.
+- **The frozen/workable portfolio partition** — the mechanism that makes the grace period actually
+  work. `rebalance()` (`mizan/backtest/clock.py`) partitions the post-divestment portfolio into a
+  **frozen** dict (every ticker currently in `HELD_NONCOMPLIANT_GRACE`, held back entirely, merged
+  back untouched after the strategy acts) and a **workable** portfolio (cash + everything else,
+  actually shown to `strategy.select()`) before ever consulting the strategy — avoiding the silent
+  bug a naive "screen, then hand the whole portfolio to the strategy" implementation would have: a
+  just-flipped ticker is both un-nameable by the strategy (which only ever sees `compliant_tickers`)
+  and therefore immediately liquidated by `apply_allocation`'s own liquidate-if-absent rule, one full
+  grace period too early.
+- **`mizan.screening.verdict` is imported as a module** (`from mizan.screening import verdict as
+  screening_verdict`), never as a bare `screen` name — load-bearing for
+  `test_every_holding_is_rescreened_every_rebalance`'s own `monkeypatch.setattr` call-counting test,
+  which would silently under-count against a bare-name import bound at load time.
+- **`PHASE_5_SPEC.md`'s own missing §6e section** — still referenced nine times, still never written
+  (re-confirmed this pass, unchanged since Phase 6's own re-check: `grep -n "§6e" PHASE_5_SPEC.md`
+  still returns the same nine lines).
+- **`apply_allocation`'s cash floor** (`max(cash, 0.0)`) remains a floating-point-noise guard against
+  `AllocationInstruction`'s own `1.0 + 1e-9` weight-sum tolerance, not a relaxation of the
+  non-negative-cash invariant.
 
-**New this phase — Phase 6's own real decisions/resolutions, each verified directly against the code
-this run:**
+**Carried forward from Phase 6 (still shipped, not overturned by Phase 7 — re-confirmed this pass
+since no file under `mizan/purification/` appears in `git diff 6edb9b5..804b333 --stat`):**
 
-- **The date-pinned-ratio discipline — the single most important design decision in this phase, and
-  the reason `purify_dividend` re-invokes `screen()` instead of reading a cached number.**
-  `ComplianceStateRecord.verdict_history` and `DividendEvent.verdict_at_ex_date` (both Phase-5-owned,
-  confirmed by direct read of `mizan/backtest/compliance_state.py`) record only the three-state
-  `Verdict` enum at each rebalance — never the actual `non_permissible_income_ratio` float that
-  produced it. A naive "just use whatever ratio the ticker's *current* screen reports" implementation
-  would silently apply the WRONG period's ratio to a dividend paid earlier in the backtest, for any
-  ticker whose ratio drifts over time — a genuine purification undercount (or overcount)
-  `ULTIMATE_PRD.md` §4.7 names by exact wording ("the ratio must be pinned to the screen *active at
-  the dividend date*, not the current screen"). `purify_dividend` (`mizan/purification/ledger.py`
-  lines 117–147, 187–282, read directly this pass) avoids this by finding the `VerdictObservation`
-  with the LARGEST `as_of_date <= dividend_event.ex_date` in the ticker's own `verdict_history`, then
-  re-invoking `mizan.screening.verdict.screen(ticker, ratio_as_of_date, con=con, cache_dir=cache_dir,
-  overrides=overrides, fiqh_params=fiqh_params)` — the exact same `con`/`cache_dir`/`overrides`/
-  `fiqh_params` the original backtest ran with — and reading the ratio off THAT call's own
-  `ScreeningVerdict.reason_trace`. Because `screen()` is a pure function of `(ticker, as_of_date, con,
-  cache_dir, overrides, fiqh_params)` plus already-frozen DuckDB/cache state (no write happens to
-  either between the original backtest and Phase 6's re-derivation — the read-only connection never
-  closes in between, see the connection-lifetime item below), this re-invocation is bit-for-bit
-  identical to the call `rebalance()` already made at that exact rebalance, not an approximation.
-  **Tradeoff:** every Mixed-verdict dividend costs one extra `screen()` call (itself potentially
-  several DuckDB queries) at purification time, which a cached-ratio design would have avoided — but
-  the cached-ratio design was never actually available, since Phase 5 never persisted the ratio in
-  the first place, and re-deriving via the same deterministic function the backtest already trusted
-  is a materially safer choice than inventing a new persisted-ratio schema this late, untested against
-  the same guarantee `screen()`'s own approved tests already give it.
-- **The Fork A/Fork C gating resolution — `fiqh_params.purify_capital_gains.value` gates BOTH Fork A
-  (dividend purification, obviously) AND Fork C (forced-divestment price-appreciation attribution),
-  even though `MASTER_PRD.md` §8's own prose never says this in one explicit sentence.** Confirmed by
-  direct read of `mizan/purification/ledger.py`'s `purify_backtest_result` (lines 355–366):
-  `divestment_entries` stays `[]` — never populated, not even with zero-amount placeholders — unless
-  `fiqh_params.purify_capital_gains.value` is `True`; when `True`, `compute_divestment_attribution` is
-  called once per `DivestmentEvent`. The reasoning, read directly from `MASTER_PRD.md` §8 this pass:
-  Fork A's own scope note is "dividends only for V1; capital-gains purification is a configurable,
-  default-OFF... flag," and Fork C's own subject — "price appreciation during the non-compliant
-  window" — is a capital gain by ordinary definition, not a dividend. `mizan/config/fiqh_params.py`'s
-  own register entry #9 source string makes the SAME toggle explicit rather than requiring a cross-
-  section inference: `purify_capital_gains` is documented there as "**Fork A**: dividends-only for V1;
-  capital-gains purification default OFF" — i.e. register #9 already names itself as the gate for
-  capital-gains purification generally, of which Fork C's mechanism is one instance. **Tradeoff:**
-  this reading was not 100% explicit in `MASTER_PRD.md`'s own Fork C paragraph taken in isolation — a
-  different, equally defensible reading (Fork C always runs, since it has its own register entry #10
-  for its *method*) was available and was not chosen. The shipped code commits to the gated reading,
-  test-verified (`test_divestment_attribution_gated_by_purify_capital_gains_config`,
-  `tests/test_purification_ledger.py`): toggling `purify_capital_gains` from `False` to `True` via
-  `model_copy` over the same `ZZDIVEST_APPREC01` backtest changes `divestment_entries` from `()` to a
-  nonempty tuple, proving the value is read from config, not hardcoded either way — but a future
-  reader who disagrees with the gating reading has a real, cited textual basis to reopen the question,
-  not just a code choice to accept on faith.
-- **The connection-lifetime bug the executor caught and fixed relative to the spec's own pseudocode.**
-  `PHASE_6_SPEC.md` §4.3 (read in full this pass) instructs the purify call to be "inserted between
-  `result = BacktestResult.model_validate(envelope.payload)` and the existing `print(f"Final
-  portfolio value: ...")` block" — a literal reading of Phase 5's own shipped `mizan/cli/backtest.py`
-  (confirmed by reading `git show 9e989eb:mizan/cli/backtest.py` directly this pass) places that
-  `result = BacktestResult.model_validate(...)` assignment at 4-space (function-body) indentation,
-  i.e. AFTER the `with db.connect(args.db_path, read_only=True) as con:` block has already exited and
-  closed `con`. Following the spec's insertion point literally would have called
-  `purify_backtest_result(result, con=con, ...)` — which internally re-invokes `screen()`, which reads
-  DuckDB through `con` — against an already-closed connection. The shipped code (confirmed by direct
-  diff read, `git diff 9e989eb..9750a18 -- mizan/cli/backtest.py`) instead moves BOTH the
-  `BacktestResult.model_validate(...)` line AND the new `purify_backtest_result(...)` call inside the
-  existing `try:` block, still nested inside the `with` statement, so `con` is provably still open
-  when purification runs; only the summary `print(...)` calls stay after the `with` block exits, since
-  they need no further DB access. **Tradeoff:** none, really — this is a straightforward correctness
-  fix over a spec pseudocode sample that did not account for exactly where Phase 5's own assignment
-  line sat relative to the connection's scope; it is flagged here specifically because it is the kind
-  of small, easy-to-miss discrepancy between "the spec's illustrative code" and "the actual file it is
-  a patch against" that a mechanical patch-apply (rather than a read-the-actual-file-first approach)
-  would have shipped broken.
-- **The module-layout deviation — `mizan/purification/` (a two-file package) instead of the single
-  `mizan/backtest/purification.py` `MASTER_PRD.md` §9.4's diagram and `PHASE_5_SPEC.md` §1/§9 both
-  named.** Confirmed: `mizan/purification/` is a real, top-level package (`ls mizan/purification/`
-  shows `__init__.py`, `ledger.py`, `attribution.py`); no file named `mizan/backtest/purification.py`
-  exists anywhere in the repository. `PHASE_6_SPEC.md` §1 names this deviation explicitly and gives
-  three reasons (Fork B/Fork C are as cleanly separable as `business_activity.py`/`financial_ratios.py`
-  already are; `MASTER_PRD.md` §9.1's own pipeline diagram draws purification as a distinct box, not a
-  `backtest/` sub-component; Phase 6 is a pure post-processing consumer of a completed `BacktestResult`,
-  not a participant in the daily event loop). **Tradeoff:** the deviation makes `ULTIMATE_PRD.md` §5
-  check 5's own literal grep line (naming `mizan/backtest/purification.py`) stale — it no longer
-  resolves to a real file — and `PHASE_6_SPEC.md` §1/§7 restate the corrected grep path
-  (`mizan/purification/`) explicitly rather than leaving a future reviewer to rediscover the mismatch;
-  the honesty cost is one more place a stale primary-source path needs a human to know it has been
-  superseded by a spec-level correction rather than a document edit.
+- **The date-pinned-ratio discipline** — `purify_dividend` finds the `VerdictObservation` with the
+  largest `as_of_date <= dividend_event.ex_date` in the ticker's own `verdict_history`, then
+  re-invokes `screen()` at that exact date rather than trusting the backtest's own most-recent
+  screen — avoiding a genuine purification undercount/overcount for any ticker whose ratio drifts
+  over time. Phase 7's own `render_purification_detail` and `render_equity_curve_plot` both display
+  the *results* of this re-derivation (each `DividendPurificationEntry.ratio_used`, and the day-by-day
+  reconstructed liability curve) but never re-run the derivation themselves — a pure, read-only
+  consumer, confirmed by direct read of both modules this pass.
+- **The Fork A/Fork C gating resolution** — `fiqh_params.purify_capital_gains.value` gates both
+  dividend purification's capital-gains scope and forced-divestment price-appreciation attribution, a
+  reasoned-not-verbatim textual inference from `MASTER_PRD.md` §8, named honestly as such rather than
+  presented as settled.
+- **The connection-lifetime bug the Phase 6 executor caught** relative to `PHASE_6_SPEC.md` §4.3's own
+  illustrative insertion point — `mizan/cli/backtest.py`'s purify call was moved inside the still-open
+  `with db.connect(...)` block rather than after it closed, a correctness fix over the spec's own
+  pseudocode. **This lesson visibly informed Phase 7's own spec**: `PHASE_7_SPEC.md` §4.3's own
+  pseudocode explicitly cites this exact prior finding ("mirroring Phase 6's own connection-lifetime
+  fix requires") and places the construction correctly from the start — confirmed by direct read of
+  both the spec text and the shipped `mizan/cli/report.py`, which needed no equivalent fix this phase.
+- **The module-layout deviation** — `mizan/purification/` (a two-file top-level package) instead of
+  the single `mizan/backtest/purification.py` `MASTER_PRD.md` §9.4's diagram named. Still real, still
+  making `ULTIMATE_PRD.md` §5 check 5's own literal grep line stale, still not corrected in
+  `ULTIMATE_PRD.md` itself as of this pass.
+
+**New this phase — Phase 7's own real decisions, each verified directly against the code this run:**
+
+- **The caveat-mandatory-at-the-function-signature design — the single most important decision in this
+  phase, and the mechanism that makes the whole project's central honesty promise a type error rather
+  than a convention.** `ULTIMATE_PRD.md` §2.2 states the requirement in prose: "the reporter takes
+  this tuple as its only render input — there is no code path that renders a number without its
+  caveat set attached." Two legitimate designs were available to satisfy that prose. **Design A**:
+  wrap the whole report payload in a `mizan.core.caveats.ResultEnvelope` (reusing Phase 1's own type
+  verbatim), reading `envelope.active_caveats` inside `render_report`. **Design B** (the one shipped):
+  give `render_report` itself a required, keyword-only `active_caveats: tuple[Caveat, ...]` parameter
+  with no default, `ReportInput` carrying no caveat field of its own at all. The difference is not
+  cosmetic. Under Design A, omitting the caveat set fails at `ResultEnvelope` *construction* time — a
+  `pydantic.ValidationError` raised wherever the envelope happens to get built, one layer removed from
+  the actual render call. Under Design B, `render_report(data)` — omitting the keyword entirely — raises
+  `TypeError: render_report() missing 1 required keyword-only argument: 'active_caveats'` **at the exact
+  call site**, before `render_report`'s own body ever executes, and `mypy --strict` independently flags
+  any call site missing the keyword as a *static* error, before the program is ever run at all. This
+  pass confirmed both halves of that claim directly: `pytest.raises(TypeError)` around a positional-only
+  call is one of the tests in `tests/test_reporting_report.py` (re-run this pass, passing, §5 below),
+  and `mypy --strict mizan tests` — re-run this pass — finds the one real call site in
+  `mizan/cli/report.py` correctly supplying the keyword and would flag it as a static error if it ever
+  stopped. **Tradeoff:** Design B reproduces `ResultEnvelope.active_caveats`'s own "no default, an
+  explicit empty tuple is a valid, deliberate, if unusual choice — silent omission is not" precedent at
+  a different layer (the function signature) than Phase 1 originally established it (the pydantic
+  model field) specifically because that is the layer where `ULTIMATE_PRD.md` §4.8's own stated
+  enforcement bar ("should be a type error, caught before runtime") actually lives — a genuinely
+  stronger reading of the same honesty requirement, chosen deliberately over the more literal
+  "wrap it in the existing envelope type" reading.
+- **Inline base64-embedded PNGs, never separate image files — the single-portable-file tradeoff, stated
+  plainly rather than left implicit.** `_render_plots_section` (`mizan/reporting/report.py` lines
+  250–266) base64-encodes both plot PNGs directly into `data:image/png;base64,...` `<img src="...">`
+  values inside the one HTML document `render_report` returns; `mizan/cli/report.py`'s `run()` writes
+  exactly one file to `--output-path`, confirmed this pass by directly generating a real report and
+  observing the output directory (§5 below): no sibling `_files/`, `assets/`, or `.png` file appeared
+  anywhere. **The tradeoff, named rather than hidden:** a single self-contained file that can be
+  copied, emailed, or opened by double-click from any working directory, at the cost of base64 inflating
+  binary size by roughly a third versus a raw file reference (and, more generally, giving up the
+  browser-cacheability and independent updatability a separate-file approach would keep) — an accepted
+  cost at this phase's own scope (two plots, tens of KB each against a synthetic fixture; the real
+  report this pass generated was 64,341 bytes total, well within any reasonable single-file budget),
+  matching Mizan's own single-user, no-hosting-surface posture (`MASTER_PRD.md` §9) more closely than a
+  multi-file bundle would.
+- **The `numpy` mypy-override fix, and why it does not weaken Mizan's own type-checking.** Promoting
+  `matplotlib` to a real dependency (§2.1 below) transitively pulls in `numpy` as a dependency of
+  matplotlib's own type stubs — and `numpy`'s own `__init__.pyi` uses the PEP 695 `type` statement
+  syntax (confirmed this pass, directly: `numpy/__init__.pyi` line 737, `type _Falsy = L[False, 0] |
+  bool_[L[False]]`), which requires a Python **3.12+** *parser* to even read, regardless of which
+  Python interpreter is actually running mypy — and this project's own `pyproject.toml` pins
+  `python_version = "3.11"` for mypy's own target-version checking, unchanged. The new
+  `[[tool.mypy.overrides]]` block (`module = "numpy.*"`, `follow_imports = "skip"`,
+  `follow_imports_for_stubs = true`) tells mypy to stop parsing numpy's own stub *bodies* at all,
+  treating numpy's public interface as `Any` — **critically, this override is scoped to the string
+  `"numpy.*"` alone**, exactly the same scoping the pre-existing `pyarrow.*` override already used one
+  block above it in the same file. It does not relax `--strict` for any module Mizan itself owns, and
+  `mizan/reporting/plots.py` never imports `numpy` directly at all (confirmed by direct read — the only
+  import is `matplotlib`/`matplotlib.pyplot`; `numpy` is reached only via matplotlib's own internal
+  type-stub graph, invisible to `plots.py`'s own source). This pass did not merely trust the module's
+  own docstring reasoning — it independently reproduced and confirmed the fix, outside the project's
+  `.venv`, empirically (§5 below): removing the override reproduces the exact original failure
+  (`numpy/__init__.pyi:737: error: Type statement is only supported in Python 3.12 and greater`) against
+  a real numpy install on a genuinely different Python interpreter than the project's `.venv`; restoring
+  it makes that specific error disappear completely, leaving zero numpy-stub-syntax errors.
+- **The `html.escape()` apostrophe fix, and why leaving quote characters unescaped is safe rather than
+  a security gap.** `_escape` (`mizan/reporting/report.py` lines 31–39) calls
+  `html.escape(value, quote=False)` — escaping `&`/`<`/`>` (the characters that can actually break HTML
+  markup) but deliberately leaving `'`/`"` untouched, which is *not* `html.escape`'s own default
+  (`quote=True`). The reasoning, stated in the function's own docstring and independently confirmed by
+  this pass reading every call site in the module: every value `_escape` ever touches is interpolated
+  into HTML **text content** — the body of a `<p>`, `<td>`, or `<div>` element — **never into an HTML
+  attribute value**. Quote-escaping (turning a literal apostrophe into `&#x27;`) is only load-bearing
+  when a string is placed *inside* an attribute's own quote-delimited value, where an unescaped quote
+  character could prematurely terminate the attribute and let following text be interpreted as new
+  markup or a new attribute — a real risk this module simply never creates the conditions for, since no
+  dynamic string is ever written into an attribute anywhere in `mizan/reporting/report.py` (confirmed:
+  every `f'<div id="..."` /`<section id="..."` attribute value in the module is a fixed, hardcoded
+  literal, never an interpolated variable). Choosing `quote=True` instead would have been safe but
+  strictly *worse* for this module's other own acceptance requirement: it would have turned a genuine
+  apostrophe inside a fiqh `source` citation string or a caveat description (e.g. "companies that exist
+  today" — actually a double-quote case, confirmed present in `CAVEAT_DESCRIPTIONS[Caveat.
+  SURVIVORSHIP_BIAS]`) into a literal `&#x27;`/`&quot;` HTML entity in the rendered page, breaking
+  `PHASE_7_SPEC.md` §8 AC3's own verbatim-substring test (`CAVEAT_DESCRIPTIONS[caveat] in
+  generated_html`) for zero actual HTML-safety benefit in a document that never uses these values in an
+  attribute context. This pass confirmed the claim empirically too, not just by reading the docstring:
+  the real report generated this pass (§5 below) contains the literal apostrophe in "a reporting
+  period's end date" and the literal double-quoted phrase "companies that exist today" verbatim, exactly
+  as written in `CAVEAT_DESCRIPTIONS`, unescaped.
+- **`matplotlib` promoted from forward-declared to a real dependency, `pandas` still not.** Per the same
+  promotion discipline Phase 2 gave `httpx` and Phase 3 gave `duckdb`/`pyarrow`, `matplotlib==3.11.1`
+  moves from the now-removed `[project.optional-dependencies].report` group into
+  `[project.dependencies]` — the first phase to actually import it (`mizan/reporting/plots.py`).
+  `pandas` remains the sole forward-declared, never-imported dependency left in the file; every
+  arithmetic operation Phase 7 performs (summing `purified_amount` per ticker, walking a sorted list of
+  dated ledger entries) is a small, explicit Python loop over already-typed values, the same shape
+  Phase 5 and 6 both already declined to promote `pandas` for.
+- **No HTML-templating dependency (Jinja2 or similar).** Plain Python f-strings and a handful of small
+  private formatting helpers are used instead, reasoned explicitly in `PHASE_7_SPEC.md` §2.2 and
+  confirmed matched by the shipped code: the report is a single, static, generated-once document with
+  no template reuse, inheritance, or untrusted-author surface a templating engine's real value
+  proposition targets, and the one genuine risk a hand-rolled builder must guard against — HTML-escaping
+  — is fully covered by the standard library's own `html.escape()`.
 
 ## 4. Domain mechanics
 
-**Fiqh register — carried forward from Phase 1, unchanged (`mizan/config/fiqh_params.py` is
-untouched by Phase 5's or Phase 6's diff, confirmed by re-reading it this pass), now shown with
-Phase 5's and Phase 6's own new readers added:**
+**Fiqh register — carried forward from Phase 1, unchanged (`mizan/config/fiqh_params.py` is untouched
+by any later phase's diff, confirmed by re-reading it this pass), now shown with Phase 7's own new
+reader added:**
 
 | # | Figure / default | Value in code | Code's own source citation | Read by |
 |---|---|---|---|---|
-| 1–5 | Ratio denominator basis/smoothing, debt/interest-investments/non-permissible-income thresholds | unchanged | unchanged | Still only `mizan/screening/verdict.py`/`financial_ratios.py` (Phase 4) directly — Phase 5/6 both read these only indirectly, via `screen()`'s own output |
-| 6–7 | Business-activity Tier 0.5 / Tier 1 toggles | unchanged | unchanged | Still only `classify_business_activity` (Phase 4), reached transitively via `screen()` |
-| 8 | Grace period length | 1 whole rebalance period | unchanged from Phase 5's own citation (`mizan/config/fiqh_params.py` register entry #8) — **`[UNVERIFIED / INFERENCE]`**, no AAOIFI primary-source citation | `mizan.backtest.compliance_state.transition` (Phase 5); Phase 6 reads it only indirectly, through the already-resolved `ComplianceStateRecord.flip_date`/`divest_date` fields it consumes |
-| **9** | **Purify capital gains (Fork A/C gate)** | **`False`** (V1 default) | `mizan/config/fiqh_params.py` register entry #9, `purify_capital_gains: FiqhParam[bool](value=False, source="Fork A: dividends-only for V1; capital-gains purification default OFF.", primary_source_gap="The primary source establishes THAT non-halal income must be purified (Merah slides 24-25) but gives no formula for capital gains. Genuinely underdetermined.")` — **`[UNVERIFIED / INFERENCE]`** on the OFF default itself (a scholarly-ruling-pending policy choice, not an AAOIFI-mandated value) | **NEW this phase** — `mizan.purification.ledger.purify_backtest_result`, read fresh on every call (`fiqh_params.purify_capital_gains.value`), gating both Fork A's own capital-gains scope AND Fork C's divestment attribution (§3 above) |
-| **10** | **Divestment attribution method** | **`DivestmentAttributionMethod.TIME_BOUNDED_PRICE_APPRECIATION`** (the only defined member) | register entry #10, `source="Fork C: price appreciation over the flip-date to divestment-date window.", primary_source_gap="No settled formula exists. The Step 10 literature sweep (2024-2026) found no proposed alternative either — an explicit null result, not an unsearched gap."` — **`[UNVERIFIED / INFERENCE]`** | **NEW this phase** — `mizan.purification.attribution.compute_divestment_attribution`, read fresh (`fiqh_params.divestment_attribution_method.value`) though there is exactly one branch to dispatch to |
-| **11** | **Purification accounting method** | **`PurificationAccountingMethod.SIDE_LEDGER`** (the only defined member) | register entry #11, `source="Fork B, now PRIMARY-SOURCE VERBATIM (Merah slide 25): purification means non-halal income 'will have to be donated to Charity and cannot be included in the investors P&L accounts'. A side-ledger is the only faithful reading."` — this one entry is NOT flagged `[UNVERIFIED]` in the register's own source string, since it quotes the primary source directly rather than inferring from it | Not read by name anywhere in `mizan/purification/` this phase (confirmed: `grep -rn "purification_accounting_method" mizan/purification/` finds no hit) — the side-ledger DESIGN it names is what `PurificationLedger`'s own existence as a value separate from `BacktestResult`'s own return figures implements structurally, not a runtime branch on the enum's value |
+| 1–5 | Ratio denominator basis/smoothing, debt/interest-investments/non-permissible-income thresholds | unchanged | unchanged | `mizan/screening/verdict.py`/`financial_ratios.py` (Phase 4) directly; Phase 5–7 all read these only indirectly, via `screen()`'s own output |
+| 6–7 | Business-activity Tier 0.5 / Tier 1 toggles | unchanged | unchanged | `classify_business_activity` (Phase 4), reached transitively via `screen()` |
+| 8 | Grace period length | 1 whole rebalance period | unchanged — **`[UNVERIFIED / INFERENCE]`**, no AAOIFI primary-source citation | `mizan.backtest.compliance_state.transition` (Phase 5); Phase 6/7 both read it only indirectly, through already-resolved `flip_date`/`divest_date` fields |
+| 9 | Purify capital gains (Fork A/C gate) | `False` (V1 default) | register entry #9 — **`[UNVERIFIED / INFERENCE]`** on the OFF default | `mizan.purification.ledger.purify_backtest_result` (Phase 6); Phase 7 renders the *result* of this gate (whether `divestment_entries` is empty) but never reads the flag itself — confirmed this pass: `grep -n "purify_capital_gains" mizan/reporting/` finds no hit |
+| 10 | Divestment attribution method | `TIME_BOUNDED_PRICE_APPRECIATION` (the only member) | register entry #10 — **`[UNVERIFIED / INFERENCE]`** | `mizan.purification.attribution.compute_divestment_attribution` (Phase 6); not read by Phase 7 |
+| 11 | Purification accounting method | `SIDE_LEDGER` (the only member) | register entry #11 — quotes the primary source directly, not `[UNVERIFIED]` | Not read by name anywhere in `mizan/purification/` or `mizan/reporting/` this phase — the side-ledger DESIGN it names is what `PurificationLedger`'s own existence as a value the report renders *alongside*, never blended into, `gross_return` implements structurally |
 
-**Purification formula, new this phase (`mizan/purification/ledger.py`, `attribution.py`):** Fork A —
-for a dividend paid by a Mixed-verdict holding, `purified_amount = non_permissible_income_ratio ×
-dividend_amount`, where the ratio is the one active AT the dividend's own `ex_date` (§3 above), never
-the ratio active at any other date — cites `MASTER_PRD.md` §8's own trigger sentence verbatim
-("purify `non_compliant_income_ratio × dividend_amount`... the ratio comes from that holding's
-most-recent screen and the dividend cash comes from Tiingo's per-day divCash field"). Fork C — for a
-forced divestment, `purified_amount = max(0.0, quantity_liquidated × (price_at_divest -
-price_at_flip))`, cites `MASTER_PRD.md` §8 Fork C's own wording ("price appreciation during the
-non-compliant window, time-bounded flip-date → divestment-date"). Both formulas are confirmed present,
-exactly as described, by direct read of `purify_dividend`/`compute_divestment_attribution` this pass
-(§2 above).
+**Phase 7 introduces no new domain figure.** Confirmed by direct read of every line under
+`mizan/reporting/`: `render_report` and its six helpers, and both `plots.py` functions, format and
+chart already-computed Phase 4/5/6 values — ticker symbols, dates, `Verdict`/`HoldingComplianceState`
+enum values, the fiqh register's own `value`/`source`/`status` fields, `PurificationLedger`'s own
+`gross_return`/`net_of_purification_return`/`purification_liability`/entry lists — with zero new
+arithmetic beyond one genuinely new but purely presentational computation: the day-by-day cumulative
+purification-liability series `_cumulative_purification_liability_as_of` (`mizan/reporting/plots.py`
+lines 30–42) reconstructs for the equity-curve plot, which is a plain filtered running sum over
+already-computed, already-dated Phase 6 ledger entries — `dividend_total + divestment_total` at each
+`daily_snapshots[i].as_of_date`, computed fresh every call, never persisted, exactly the "trivially
+reconstructible by a later phase" reconstruction `PHASE_6_SPEC.md` §6d explicitly anticipated and named
+as Phase 7's own job. This is a rendering-time convenience computation, not a new domain figure with
+its own fiqh-register entry or AAOIFI citation.
 
-**AAOIFI's underlying rule, and the honest limit of what Mizan actually does with it (`MASTER_PRD.md`
-§8, read in full this pass):** "non-halal income must be donated to charity and cannot be included in
-the investor's P&L" — a side-ledger by definition, purification carried outside the return, never
-netted into NAV. **Mizan computes and tracks `purification_liability` as a number; it does not
-transfer, donate, or move any money anywhere.** Confirmed by direct read of every line under
-`mizan/purification/`: no HTTP client, no payment/charity API, no file write beyond the in-memory
-`PurificationLedger` object itself. `PHASE_6_SPEC.md` §9 states this non-goal explicitly ("It does NOT
-mean any cash, wire transfer, ledger entry in an external system, or API call to an actual charity is
-made") and the shipped code matches that claim exactly — this is not a gap the code silently leaves
-open, it is a boundary the spec named and the code respects.
+**Compliance-flip state machine, AAOIFI 30/30/5 thresholds, EDGAR/Tiingo rate limits, splitFactor
+arithmetic direction, and the purification formulas — all carried forward from Phases 4–6, unchanged,
+now with Phase 7's own render-layer confirmed to match:**
 
-**Carried forward from Phase 5 — the compliance-flip state machine (`MASTER_PRD.md` §7.3's own
-diagram, implemented in `mizan/backtest/compliance_state.py`, untouched by Phase 6's diff):**
-
-`HELD_COMPLIANT` → (fresh verdict `NON_COMPLIANT`) → `HELD_NONCOMPLIANT_GRACE` → (grace countdown
-reaches 0) → `DIVESTED`. Confirmed by direct read of `transition()`'s own transition table: a
-`HELD_COMPLIANT` record whose fresh verdict stays `PURE`/`MIXED` just appends a `VerdictObservation`
-and stays put; a flip to `NON_COMPLIANT` sets `flip_date` and seeds
-`grace_rebalances_remaining = fiqh_params.grace_period_rebalances.value` (currently `1`, per the
-register entry above); every subsequent rebalance while `HELD_NONCOMPLIANT_GRACE` decrements that
-counter by exactly 1 regardless of what the new verdict says — **there is no edge back to
-`HELD_COMPLIANT`** — and a decrement to `0` fires `DIVESTED`, stamping `divest_date` and returning a
-`DivestmentEvent`. A `DIVESTED` ticker is asserted (via `AssertionError`, not silently tolerated)
-never to be re-screened as a holding again — enforced upstream by `rebalance()` liquidating a
-divested position the same rebalance it fires, before the ticker could ever reach `transition()`
-again. With the register's current value of `1`, "grace period" in practice means: a ticker flips at
-rebalance N, survives rebalance N (frozen, untouched), and is forced out exactly at rebalance N+1
-regardless of its verdict at N+1.
-
-**Carried forward from Phase 5 — the quarterly rebalance cadence, and why it is fixed, not
-configurable:**
-`mizan/backtest/clock.py`'s own module-level `_REBALANCE_MONTHS: tuple[int, ...] = (1, 4, 7, 10)` is
-the *only* rebalance-date generator anywhere under `mizan/backtest/` — there is no CLI flag, function
-parameter, or config value anywhere in this phase's code that can make a backtest rebalance faster
-than quarterly (confirmed: `mizan/cli/backtest.py`'s `add_subparser` has no
-`--rebalance-frequency`-shaped flag, and `run_backtest`'s own signature carries no such parameter).
-This is a deliberate, cited engineering choice, not an oversight: `ULTIMATE_PRD.md` §1.1 states that
-"a proposal to shorten the rebalance cadence below quarterly... is crossing a values boundary, not
-tuning a parameter... must be escalated to the human, never absorbed as an enhancement" — i.e. this
-is a scope boundary the project has already confirmed and closed, not an open question Phase 5
-reopened.
-
-**Carried forward from Phase 5 — Tiingo's `splitFactor` arithmetic direction, verified live that
-phase (`docs/modernization_log.md` §6.2b, read in full):** Tiingo's own splits documentation
-(https://www.tiingo.com/documentation/corporate-actions/splits, fetched 2026-08-31) states verbatim
-"the ratio of splitTo from splitFrom... splitFactor = splitTo/splitFrom," confirmed against a real
-worked example (Realty Income, 2021-11-15, a 1-to-1.0327 split, `splitFactor: 1.0327`). This
-resolves a genuine, previously-unverified gap `PHASE_5_SPEC.md` §0.1 explicitly named rather than
-guessed at (no prior phase's data-source verification pass had checked this direction).
-**Consequence, confirmed by direct read of `apply_split`:** `split_factor` is the multiplier applied
-to a held share count, never its reciprocal — `mizan/backtest/portfolio.py`'s `apply_split` computes
-`new_quantity = holding.quantity * split_factor` (a 2-for-1 split, `splitFactor=2.0`, turns 100
-shares into 200), and price is deliberately never adjusted by this function at all (valuation stays
-governed by `raw_close`, per Phase 5's own §6a decision carried in `portfolio.py`'s module
-docstring — splits and dividends are handled explicitly and separately, never via an
-adjusted-price series, so a dividend credited to cash is never double-counted against an
-already-dividend-adjusted price).
-
-**Ingestion, normalization, and screening domain mechanics — carried forward from Phase 2/3/4,
-unchanged (none of `ingest_edgar.py`, `ingest_tiingo.py`, `db.py`, `normalize.py`,
-`business_activity.py`, `financial_ratios.py`, or `mizan/screening/verdict.py` is touched by Phase
-5's or Phase 6's diff):** SEC EDGAR's 10 req/s rate limit, Tiingo's 50/hour–1,000/day request budget
-and 500-ticker/month cap, the `fundamentals_facts`/`price_bars` uniqueness keys, the 21-SIC-code
-three-tier business-activity map, and the 30/30/5 AAOIFI ratio thresholds all remain exactly as the
-Phase 4 comprehension pass described — re-confirmed present and untouched via `git diff
-9e989eb..9750a18 --stat`, which lists none of those files.
+- `HELD_COMPLIANT` → (fresh verdict `NON_COMPLIANT`) → `HELD_NONCOMPLIANT_GRACE` → (grace countdown
+  reaches 0) → `DIVESTED`, no edge back to `HELD_COMPLIANT`, current grace value `1` rebalance. This
+  pass's own generated report (§5 below) renders exactly this history for its own fixture ticker's
+  `verdict_history` observation count, matching the state machine's own documented behavior.
+- SEC EDGAR's ≥0.12s/≥600s rate limiter, Tiingo's 50/hour–1,000/day budget and 500-ticker/month cap,
+  the 21-SIC-code three-tier business-activity map, and the 30/30/5 AAOIFI ratio thresholds all remain
+  exactly as Phase 4's comprehension pass described — untouched by any later phase's diff.
+- Fork A — `purified_amount = non_permissible_income_ratio × dividend_amount`, ratio pinned to the
+  dividend's own `ex_date`. Fork C — `purified_amount = max(0.0, quantity_liquidated ×
+  (price_at_divest − price_at_flip))`. Both formulas, unchanged since Phase 6, are what
+  `render_purification_detail` tabulates row-by-row and what `render_equity_curve_plot` sums into a
+  running series — confirmed by this pass's own generated report showing exactly the two dividend-entry
+  rows (`ZZMIXED_RATIODRIFT01`, ratios `0.020000` and `0.040000`, purified amounts `1000.00` and
+  `2100.00`) the underlying fixture's own ratio-drift design (§3 above, carried from Phase 6) predicts.
+- AAOIFI's underlying rule — non-halal income must be donated to charity, never counted in NAV — is a
+  side-ledger by definition; `purification_liability` remains a computed, tracked number only. Mizan
+  implements no charity-transfer feature in any phase, Phase 7 included: confirmed by direct read of
+  every line under `mizan/reporting/`, no HTTP client, no payment/charity API, nothing beyond
+  `PurificationLedger` formatted into an HTML table and a bar chart.
 
 ## 5. Honesty audit
 
-Ran the same class of verification `PHASE_6_SPEC.md` §7 (guards)/§8 (acceptance criteria) specify,
+Ran the same class of verification `PHASE_7_SPEC.md` §7 (guards)/§8 (acceptance criteria) specify,
 against the code as it exists in the repository right now, this run — not trusting the spec's or the
-approval commit's claim that they pass. No adversarial re-review was performed (Phase 6 is already
-approved); this is an independent comprehension-grade honesty pass, run fresh this session rather
-than restating the review's own verdict.
+approval commit's claim that they pass. No adversarial re-review was performed (Phase 7 is already
+approved); this is an independent comprehension-grade honesty pass, run fresh this session. **The
+review that already approved Phase 7 was, correctly, unusually rigorous for this specific phase** — it
+actually generated a real report from the synthetic fixture and read its content, and actually removed
+and restored the numpy mypy override to prove it load-bearing, rather than trusting either claim on
+paper. That rigor was the right call, not merely thorough for its own sake: Phase 7 is the final phase,
+and the report is literally the mechanism the whole seven-phase project is supposed to make dishonesty
+structurally impossible through — a phase whose entire job is "never let a number appear without its
+warning label" deserves exactly this level of "did you actually look," not a documentation-trusting
+pass. This comprehension pass did its own independent version of both checks rather than merely
+restating the review's verdict, and both came back confirmed.
 
 **Everything below was re-run and passed as claimed, this run, inside the project's `.venv`:**
-- `pytest tests/` — **365 passed** (340 carried from Phase 1–5 + 25 new this phase: 17 in
-  `tests/test_purification_ledger.py`, 7 in `tests/test_purification_attribution.py`, 1 new case
-  appended to `tests/test_cli_backtest.py`), no regressions, 127s wall time.
+
+- `pytest tests/` — **406 passed**, no failures, no errors (365 carried from Phase 1–6 + 41 new this
+  phase: `tests/test_reporting_report.py`, `tests/test_reporting_plots.py`,
+  `tests/test_cli_report.py`), ~50s wall time.
 - `ruff check mizan tests` — "All checks passed!", exit 0, under the pinned `ruff==0.16.5`.
-- `mypy --strict mizan tests` — "Success: no issues found in 59 source files" (up from 54 in the
-  Phase 5 pass — exactly 5 new files: `mizan/purification/__init__.py`, `ledger.py`, `attribution.py`,
-  `tests/test_purification_ledger.py`, `tests/test_purification_attribution.py`), inside `.venv`.
-- `grep -rn "noqa" mizan/` — exactly the same three `# noqa: N812` hits Phase 4's comprehension pass
-  already found (`mizan/data/models.py`, `mizan/data/normalize.py`, `mizan/screening/verdict.py`),
-  plus `models.py`'s unrelated `N815` wire-format suppressions — zero new suppressions anywhere
-  under `mizan/purification/`.
-- `git log --format=%B f5b8132..9750a18` — no `Co-Authored-By`, no "Generated with," no
-  model/assistant name anywhere in Phase 6's technical-blueprint or implementation commit history
-  (G-AI clean).
-- The five failure-mode greps `PHASE_6_SPEC.md` §7 specifies for the corrected `mizan/purification/`
-  path — all re-run directly this pass, all clean: `grep -rniE
-  "openai|anthropic|gemini|vertex|langchain|\bllm\b|chat_completion|completion\(" mizan/purification/`
-  (no hit, G-LLM6); `grep -rniE
-  "\b(short|shorts|shorting|borrow|borrowed|borrowing|margin|leverage|leveraged|levered|option|options|future|futures|swap|swaps|derivative|derivatives)\b"
-  mizan/purification/` (no hit, G-BOUND2); `grep -rniE "INSERT INTO|CREATE TABLE|ALTER TABLE|DROP TABLE"
-  mizan/purification/` (no hit, G-P5/G-DB6); `grep -rn "duckdb.connect" mizan/purification/` (no hit,
-  G-DB6); `grep -rn "daily_snapshots\s*=" mizan/purification/` (no hit — nothing under
-  `mizan/purification/` ever reassigns a `daily_snapshots` value, confirming `net_of_purification_
-  return` is the only site `purification_liability` is ever subtracted from anything, G-P3).
-- `BacktestResult.purification_ledger`'s declared type — confirmed byte-for-byte unchanged
-  (`dict[str, object] | None = None`) by direct diff read of `mizan/backtest/clock.py` across
-  `9e989eb..9750a18` (the file does not appear in the diff stat at all), matching `PHASE_6_SPEC.md`
-  §3.1's own binding decision and §8 AC13.
+- `mypy --strict mizan tests` — "Success: no issues found in **66 source files**" (up from 59 in the
+  Phase 6 pass — exactly 7 new files: `mizan/reporting/__init__.py`, `report.py`, `plots.py`,
+  `mizan/cli/report.py`, and the three new test files), inside `.venv`.
+- `grep -rn "noqa" mizan/` — exactly the same three `# noqa: N812` hits every prior comprehension pass
+  found, plus `models.py`'s unrelated `N815` suppressions — zero new suppressions anywhere under
+  `mizan/reporting/`.
 
-**The connection-lifetime finding, found independently this pass by comparing the spec's own §4.3
-pseudocode against Phase 5's actual, already-committed `mizan/cli/backtest.py` (not merely trusting
-that the shipped diff "looks right"):** `PHASE_6_SPEC.md` §4.3 instructs the purify call to be
-inserted "between `result = BacktestResult.model_validate(envelope.payload)` and the existing
-`print(...)` block." Reading Phase 5's actual committed file (`git show
-9e989eb:mizan/cli/backtest.py`) shows that assignment sitting OUTSIDE the `with db.connect(...) as
-con:` block, at function-body indentation — meaning a literal application of the spec's insertion
-point would have called `purify_backtest_result` (which internally calls `screen()`, which reads
-DuckDB through `con`) after `con` was already closed. The shipped diff does NOT do this: both the
-`BacktestResult.model_validate(...)` line and the new `purify_backtest_result(...)` call were moved
-inside the existing `try:` block, still nested inside the `with` statement (confirmed directly, `git
-diff 9e989eb..9750a18 -- mizan/cli/backtest.py`, lines 39–53 of that hunk). This is a genuine,
-correctly-executed deviation from the spec's own literal illustrative code — flagged here as the
-single most consequential thing this honesty pass found, since a mechanical "patch the file exactly
-where the spec says" approach would have shipped a `mizan backtest` that halts on a closed-connection
-error every time purification actually has work to do (any Mixed-verdict dividend, or any divestment
-with `purify_capital_gains=True`). See §3 above for the decision writeup.
+**This pass independently generated a real report from the synthetic fixture and read its actual
+content — not merely trusted the spec's description of what it should contain.** Built a real DuckDB
+database from `tests.fixtures.synthetic_universe.ZZMIXED_RATIODRIFT01` (the Mixed-verdict,
+ratio-drifting fixture ticker, via `fx.write_universe_cache` + `fx.load_into_duckdb`, the exact same
+fixture-seeding helper `test_cli_report.py`'s own end-to-end test uses), then called
+`mizan.cli.report.run()` directly against it (`--start-date 2026-01-01 --end-date 2026-07-01
+--initial-cash 1000000.0`), exactly reproducing the CLI's own real code path. Result: exit code `0`, a
+real `real_report.html` file, **64,341 bytes**, containing:
+- Section order, confirmed by literal string search: `id="caveats"` → `id="fiqh-register"` →
+  `id="returns"` → `id="ticker-summary"` → `id="purification-detail"` → `id="plots"` — caveats
+  genuinely render first, exactly as `PHASE_7_SPEC.md` §6a/§8 AC1 require, not merely as documented
+  intent.
+- The caveats section contains the full, verbatim look-ahead-bias and survivorship-bias description
+  text, unescaped apostrophes and quotes intact (`"a reporting period's end date"`, `"companies that
+  exist today"`) — directly confirming both the caveat-completeness guarantee and the `quote=False`
+  escaping decision (§3 above) in real rendered output, not just in the source.
+- `id="returns"` shows `Gross return: 0.102500` and `Net-of-purification return: 0.099400` — genuinely
+  distinct figures (the ledger's own `purification_liability: 3100.00` is nonzero), rendered in two
+  separately-`id`'d elements, never combined into one sentence.
+- `id="purification-detail"` shows exactly two `DividendPurificationEntry` rows —
+  `ZZMIXED_RATIODRIFT01, 2026-02-15, 0.020000, 1000.00` and `ZZMIXED_RATIODRIFT01, 2026-05-15,
+  0.040000, 2100.00` — the ratio-drift fixture's own 2%→4% design (§4 above) visibly, correctly
+  reflected in the actual rendered numbers, and an empty Divestment Purification Entries table (this
+  fixture triggers no forced divestment).
+- `id="plots"` contains exactly two `<img src="data:image/png;base64,...">` tags, no other `<img>`
+  anywhere, no relative or absolute filesystem path anywhere in the document — confirmed by direct
+  string count (`html.count("data:image/png;base64,") == 2`).
+- Exactly one file (`real_report.html`) exists in the output directory afterward — no sibling image
+  file, confirming §6e/§8 AC9's single-portable-file claim empirically, not just by code inspection.
 
-**`PHASE_6_SPEC.md`'s own claims, checked directly against the code rather than assumed, this run:**
-- §1's claim that only `mizan/cli/backtest.py` is modified under an earlier phase's ownership, and
-  only additively — confirmed: `git diff 9e989eb..9750a18 --stat` shows exactly one earlier-phase
-  file touched (`mizan/cli/backtest.py`, +36/−7 lines per `git diff --numstat`; the 7 deleted lines
-  are the docstring's own old wording plus the `result = BacktestResult.model_validate(...)` line at
-  its old location, relocated rather than deleted outright — confirmed line-by-line no existing
-  runtime behaviour was removed, only reworded/relocated, by the diff read above), plus one
-  additive-only fixture file (`tests/fixtures/synthetic_universe.py`) and one additive-only test file
-  (`tests/test_cli_backtest.py`); every other changed file is entirely new.
-- §1's claim that the module-boundary deviation (`mizan/purification/` vs. the diagrammed
-  `mizan/backtest/purification.py`) is real and the corrected grep path is restated — confirmed: no
-  `mizan/backtest/purification.py` file exists anywhere in the repository; `mizan/purification/`
-  does (§2/§3 above).
-- §6c's own textual argument for gating Fork C by `purify_capital_gains` — checked directly against
-  `MASTER_PRD.md` §8's actual prose this run (not merely trusting the spec's paraphrase): the
-  spec's quoted excerpts ("dividends only for V1... capital-gains purification is a configurable,
-  default-OFF... flag" and Fork C's "price appreciation... time-bounded") are accurate, verbatim
-  quotes of the real document, confirmed by direct read of `MASTER_PRD.md` lines 251–269 this pass.
-  The gating conclusion itself is a reasoned inference, not a verbatim instruction — named honestly
-  as such in §3 above, not overstated as settled by this pass either.
-- §8's 21 acceptance criteria — spot-checked three directly against the test suite rather than all
-  21: AC1 (ratio-drift anti-undercount) maps to
-  `test_two_dividends_same_ticker_different_ratios_purified_at_own_period_ratio`; AC3 (gated Fork C)
-  maps to `test_divestment_attribution_gated_by_purify_capital_gains_config`; AC5 (gross/net
-  distinctness) maps to `test_gross_and_net_of_purification_return_distinct_when_liability_nonzero`
-  and `test_gross_and_net_of_purification_return_equal_when_ledger_empty` — all three present in
-  `tests/test_purification_ledger.py`, all passing per the full-suite run above.
+**The numpy mypy-override fix was independently, empirically re-verified this pass — inside and
+outside `.venv`, reproducing the original failure and confirming the fix resolves it — going further
+than merely re-running the same command the review already ran.** Confirmed the system (non-`.venv`)
+Python (3.14.4, via `/c/Python314/python`) has both `mypy` (2.3.1) and `numpy` (2.5.2) installed
+independently of this project — a genuinely different environment than the project's own `.venv`.
+Confirmed `numpy/__init__.pyi` line 737 does contain the PEP 695 `type` statement
+(`type _Falsy = L[False, 0] | bool_[L[False]]`) in that real, installed numpy package. Then, using a
+minimal standalone script that imports `numpy` and a `python_version = 3.11` mypy config matching this
+project's own pin: **without** the override, mypy fails with the exact originally-documented error
+(`numpy/__init__.pyi:737: error: Type statement is only supported in Python 3.12 and greater [syntax]`,
+`Found 1 error in 1 file (errors prevented further checking)`); **with** the override added, the same
+command against the same file reports `Success: no issues found in 1 source file`. This directly,
+empirically confirms the fix is real and does what its own docstring claims, on a genuinely different
+Python interpreter/mypy/numpy install than the project's `.venv` uses.
 
-**No new spec-completeness gap found this pass** of the kind Phase 5's own §6e finding was (a
-referenced-but-never-written section) — `grep -n "§6[a-e]"` and a header-pattern check against the
-full 886-line `PHASE_6_SPEC.md` this run found every cross-referenced subsection (§6a/§6b/§6c/§6d)
-actually present and written.
+**One important nuance this pass found and is stating precisely, because the open item this touches
+(§6 below) deserves an accurate update, not an overstated one:** running the *full*
+`mypy --strict mizan tests` (not the isolated numpy-only repro above) against the system Python outside
+`.venv` still reports errors — but they are `Cannot find implementation or library stub for module
+named "duckdb"` and `"matplotlib"`, **not** a numpy-stub-syntax parse failure. Confirmed why: neither
+`duckdb` nor `matplotlib` is installed in that system Python environment at all (`pip show duckdb
+matplotlib` outside `.venv` returns "Package(s) not found"). This is a *different*, already-documented,
+environment-completeness issue (the project's own dependencies simply are not installed outside
+`.venv` — the same category as the pre-existing "duckdb-import gap" Phase 3's own comprehension pass
+first flagged and every phase since has carried forward), not a recurrence of the original numpy
+PEP-695 parse crash. The numpy-specific bug the override targets is genuinely, structurally fixed,
+confirmed on a real, independent environment; the broader "mypy --strict mizan tests doesn't cleanly
+pass outside .venv" statement remains true today only because that environment lacks the project's
+actual runtime dependencies, an orthogonal and much less interesting gap than the one that used to
+block it. See §6 below for how this changes that open item's status.
 
-**Phase 1's documented mypy/numpy environment gap, and Phase 3/4/5's related duckdb-import gap —
-both still real, the duckdb gap now touching two more files this phase:**
+**`PHASE_7_SPEC.md`'s own claims, checked directly against the code rather than assumed, this run:**
 
-- **Inside `.venv`**: clean, 0 errors, 59 files (confirmed above).
-- **Outside `.venv`**: the original numpy stub failure (`numpy/__init__.pyi:737: error: Type
-  statement is only supported in Python 3.12 and greater`) is environment-specific and unrelated to
-  Phase 6's own code — not independently re-verified this pass (Phase 6 does not touch numpy usage in
-  any way), carried forward on the strength of Phase 1's own original finding. The duckdb-import gap
-  Phase 3's comprehension pass first found, and Phase 4/5 extended, now also reaches
-  `mizan/purification/ledger.py` and `mizan/purification/attribution.py` (confirmed this run: both
-  files carry `import duckdb` under `TYPE_CHECKING`, read directly at the top of each file) — two more
-  consumers of the same already-flagged, already-documented, environment-specific limitation. Neither
-  new test file (`test_purification_ledger.py`/`test_purification_attribution.py`) imports `duckdb`
-  directly at module scope in a way this pass's grep needs to separately track, since both are
-  exercised inside `.venv` where the limitation does not manifest. `PHASE_3_SPEC.md`'s "build and
-  verify inside `.venv`" instruction remains the correct, unchanged mitigation.
+- §1's claim that no earlier phase's file is modified at all except `mizan/cli/main.py` (one
+  import + one registration line) — confirmed: `git diff 6edb9b5..804b333 --stat` shows exactly that,
+  a stricter posture than every phase since Phase 3.
+- §6a's caveat-first-ordering claim — confirmed both by direct code read (`render_report`'s own body
+  builds `caveats_html` first and concatenates it first into `body`) and by this pass's own generated
+  report's literal section order (above).
+- §6e's inline-base64/single-file claim — confirmed both by code read and by this pass's own generated
+  report (above).
+- §2.1's matplotlib re-verification claim (`3.11.1`, uploaded 2026-07-18, unchanged) — confirmed by
+  direct read of `docs/modernization_log.md` §6.2c, itself dated and reasoned consistently with
+  `PHASE_7_SPEC.md`'s own front-matter claim.
+- §8's 22 acceptance criteria — spot-checked five directly against the test suite and this pass's own
+  generated report rather than all 22: AC1 (caveats-first ordering) and AC6 (well-formed HTML) map to
+  assertions in `tests/test_reporting_report.py`, both passing; AC7 (end-to-end, both plot empty-input
+  branches reached) maps to
+  `test_report_end_to_end_handles_an_empty_backtest_window_reaching_both_plot_empty_branches` in
+  `tests/test_cli_report.py`, passing; AC9 (inline, never external) and AC4 (gross/net distinctness)
+  were both independently re-confirmed by this pass's own real-report generation above, not merely by
+  reading the test that already checks them.
 
-**Phase 2's AC15 noqa-enumeration finding, and Phase 4's LongTermInvestments/gambling-SIC-code open
-items — re-checked this run, all still accurate, none touched by Phase 5 or Phase 6:**
-
-- The Phase 2 AC15 file-enumeration mismatch (`A003` absent from `mizan/data/models.py`'s own noqa
-  enumeration) remains present and unaffected — `models.py` is untouched by Phase 5 or Phase 6.
-- `LongTermInvestments` (`INTEREST_BEARING_INVESTMENT_TAGS`) remains `[UNVERIFIED]` in
-  `docs/modernization_log.md` §6.3 — Phase 6 does not touch `financial_ratios.py` and performed no
-  new XBRL-tag verification pass; the ratio-drift fixture (`ZZMIXED_RATIODRIFT01`) uses
-  `InvestmentIncomeInterest`, a tag already `[VERIFIED]` from Phase 4's own pass, not
-  `LongTermInvestments`.
-- The `SIC_TIER_MAP` gambling/casino gap (no dedicated Tier-0 SIC 7993, since it is not a real
-  SEC-assigned code; real gambling issuers file under SIC 7011/Tier 1) remains present and
-  unaffected — `business_activity.py` is untouched by Phase 5 or Phase 6.
+**No new spec-completeness gap found this pass** of the kind Phase 5's own §6e finding was — `grep -n
+"§6[a-e]"` and a header-pattern check against the full 818-line `PHASE_7_SPEC.md` this run found every
+cross-referenced subsection (§6a/§6b/§6c/§6d/§6e) actually present and written, unlike `PHASE_5_SPEC.md`'s
+own still-uncorrected gap (carried forward, §6 below).
 
 **No new gap this pass otherwise found beyond what §3 above already surfaces as deliberate, logged
-decisions** (the date-pinned-ratio re-derivation cost, the Fork A/C gating's textually-inferred-not-
-verbatim status, the connection-lifetime fix, the module-layout deviation) and what §6 below restates
-as still-open carried-forward items.
+decisions** (the caveat-mandatory-signature design, the base64-embedding tradeoff, the numpy-override
+fix and its precise scope, the escaping decision) and what §6 below restates as still-open
+carried-forward items.
 
 ## 6. Open items
 
-**The single most important open item, carried forward from Phase 4 and restated prominently
-because Phase 6, exactly like Phase 4 and Phase 5 before it, only proves the mechanism works on
-synthetic data:**
+**The single most important open item, carried forward from Phase 4 and restated one final time
+because Phase 7, exactly like every phase before it, only proves the mechanism works on synthetic
+data — and now that the pipeline is complete, this is the one gap standing between "the software
+works" and "the software is trustworthy for a real decision":**
 
 - **The real ~100-ticker curated universe and its hand-verified business-activity override map still
-  do not exist anywhere in this repository.** Phase 6 built and proved out the generic purification
-  MECHANISM — the date-pinned ratio lookup, the Fork A/B/C gating, the side-ledger accrual — verified
-  only against the sixteen synthetic fixture tickers now in `tests/fixtures/synthetic_universe.py`
-  (Phase 4's original set, plus Phase 5's `ZZFLIP01`, plus this phase's three additions:
-  `ZZMIXED_RATIODRIFT01`, `ZZPURE_DIV01`, `ZZDIVEST_APPREC01` — never real issuers, CIK prefix
-  `999...`). It did **not** build, and was never supposed to build, the real hand-researched activity
-  map. Running `mizan backtest` against real tickers today would deploy real purification arithmetic
-  against whatever generic SIC-first-pass verdict `screen()` produces for those tickers — not a
-  trustworthy, hand-verified real-world compliance-and-purification answer, exactly the same caveat
-  Phase 4's own open item already stated for `mizan screen` alone and Phase 5's carried forward for
-  the backtest engine.
+  do not exist anywhere in this repository.** All seven phases, Phase 7 included, were verified only
+  against the sixteen synthetic fixture tickers in `tests/fixtures/synthetic_universe.py` (never real
+  issuers, CIK prefix `999...`) — unmodified by this phase, needing no addition since every plot/table
+  Phase 7 renders is a presentation of data the existing fixture set already exercises. Running
+  `mizan report` against real tickers today would produce a real-looking, fully-caveated, correctly-
+  formatted HTML page built on a generic SIC-code first-pass verdict, not a trustworthy, hand-verified
+  real-world compliance-and-purification answer — the same caveat every prior phase's own open item
+  already stated, now reaching its final, most user-visible form: a polished report that looks
+  authoritative but is honestly built on invented companies.
+
+**Carried forward from Phase 6, status re-checked and updated this pass:**
+
+- **The mypy/numpy-outside-`.venv` gap — status materially changed this phase, updated here rather
+  than left stale.** Previously an open, unresolved, environment-specific gap since Phase 1. **This
+  pass's own empirical re-verification (§5 above) confirms Phase 7's `numpy.*` mypy override
+  genuinely, structurally fixes the specific bug this item was about** — the PEP 695
+  `type`-statement parse failure in numpy's own stub file — reproduced and resolved on a real,
+  independent Python/mypy/numpy install outside `.venv`. **What remains open, restated precisely rather
+  than left as a vague "still open":** `mypy --strict mizan tests` still does not cleanly pass on an
+  arbitrary machine outside `.venv`, but only because that environment does not have `duckdb` or
+  `matplotlib` installed at all — an entirely different, already-known category of gap (the project's
+  own runtime dependencies not being present outside its own managed environment), not a recurrence of
+  the numpy-stub-syntax crash. **Recommended status going forward: closed as originally scoped
+  (the numpy PEP-695 parse crash, specifically), superseded by the pre-existing and broader
+  "build and verify inside `.venv`" instruction** (`PHASE_3_SPEC.md`'s own standing mitigation, which
+  covers the duckdb/matplotlib-not-installed case just as it always has).
+- **The three escalated fiqh open questions (Q1, Q2, Q3 in `ULTIMATE_PRD.md`)** — still open by design;
+  Phase 7 touches none of them (it renders the register, does not adjudicate it).
+- **All eleven fiqh register entries remain `PENDING_SCHOLARLY_VERIFICATION`** — unchanged; Phase 7
+  does not touch `mizan/config/fiqh_params.py`, only renders it in full, unconditionally, on every
+  report.
+- **`PHASE_5_SPEC.md`'s own missing §6e section** — referenced nine times, never written, still not
+  fixed as of this pass (`grep -n "§6e" PHASE_5_SPEC.md` still returns the same nine lines). Worth
+  fixing directly in the spec file in any future documentation pass, though it no longer blocks
+  anything — every later phase's own spec, Phase 7's included, has its own complete, self-contained
+  §6 with no missing cross-reference.
+- **The frozen/workable partition adds real complexity to `rebalance()`** that a future maintainer
+  needs to understand correctly to avoid reintroducing the exact bug it prevents — unaffected by
+  Phase 6 or Phase 7, since `mizan/backtest/clock.py` is untouched by either.
+- **The grace period's value (`1` rebalance) carries no AAOIFI primary-source citation** — unchanged.
+- **The Phase 2 AC15 noqa-enumeration mismatch** — still present, unaffected by any later phase.
+- **`LongTermInvestments` remains `[UNVERIFIED]`, and `SIC_TIER_MAP` still has no dedicated
+  gambling/casino Tier-0 code** — both unaffected by any phase since Phase 4.
+- **Corporate-action anomaly scan is deliberately conservative and will produce false positives** —
+  unchanged, still an accepted tradeoff, not a defect.
+- **The Fork A/Fork C gating decision rests on a reasoned textual inference from `MASTER_PRD.md` §8,
+  not a verbatim instruction** — a future scholarly-verification pass could reasonably reopen it; Phase
+  7 renders whichever way the gate resolves, without taking a position on it.
+- **`mizan/purification/` deviates from `MASTER_PRD.md` §9.4's and `PHASE_5_SPEC.md`'s own diagrammed
+  module path** — real, cited, reasoned, still not corrected in `ULTIMATE_PRD.md` itself.
+- **The gross/net-of-purification accounting is a plain point-to-point return, not annualized,
+  risk-adjusted, or time-weighted** — an honest, deliberate scope limit from Phase 6, now visible to a
+  report reader for the first time via Phase 7's `id="returns"` section; worth a future human not
+  mistaking either figure for a CAGR-style return.
+- **The DuckDB file remains a local, derived, regenerable artifact with no versioned migration path** —
+  unchanged; Phase 7 adds no new table, column, or index (confirmed: `mizan/data/db.py` untouched, and
+  neither `mizan/reporting/report.py` nor `plots.py` opens a DuckDB connection at all).
 
 **New this phase:**
 
-- **The gross/net-of-purification accounting is a plain point-to-point return over the whole backtest
-  window, not annualized, risk-adjusted, or time-weighted — worth a future human's attention before
-  it is presented to a real user.** Confirmed by direct read of `PurificationLedger.gross_return`'s
-  own docstring and `_compute_returns`'s implementation (`mizan/purification/ledger.py`): `gross_return
-  = (end_value - start_value) / start_value`. This is an honest, deliberate scope limit
-  (`PHASE_6_SPEC.md` §3.2 states Phase 7's reporter is free to compute richer figures from
-  `daily_snapshots` and `purification_liability` directly), not a defect — but a future reader of
-  Phase 7's report should not mistake this field for an annualized or CAGR-style return.
-- **The empty-`daily_snapshots` edge case is handled, but is worth a future human noticing rather than
-  assuming away.** `_compute_returns` returns `(0.0, 0.0)` when `daily_snapshots` is empty (e.g. a
-  `start_date`/`end_date` window with zero resolvable `price_bars` rows) — confirmed by direct read
-  of its docstring's own reasoning (an empty snapshot series implies zero dividend/divestment events
-  too, so `purification_liability` is provably `0.0` in that case, keeping the "the two return figures
-  are equal iff the ledger is empty" invariant intact even at this boundary). This is correctly reasoned,
-  not a gap — flagged here only because it is exactly the kind of quiet edge-case handling a future
-  refactor could accidentally break without a dedicated test asserting it (no test in
-  `tests/test_purification_ledger.py` explicitly constructs an empty-`daily_snapshots` `BacktestResult`
-  and asserts `(0.0, 0.0)` — this pass did not find one; every purification test exercises a backtest
-  with at least one trading day).
-- **The Fork A/Fork C gating decision (§3 above) rests on a reasoned textual inference from
-  `MASTER_PRD.md` §8, not a verbatim, unambiguous instruction — a future scholarly-verification pass
-  could reasonably reopen it.** Named honestly in §3/§5 above rather than presented as settled; a
-  future human revisiting the eleven-entry fiqh register's scholarly review should know register #9's
-  scope (Fork A capital-gains toggle) is doing double duty as Fork C's own gate, by inference, not by
-  the primary source stating so in one sentence.
-- **`mizan/purification/` deviates from `MASTER_PRD.md` §9.4's and `PHASE_5_SPEC.md`'s own diagrammed
-  module path (`mizan/backtest/purification.py`)** — a real, cited, reasoned deviation (§3 above), but
-  it means `ULTIMATE_PRD.md` §5 check 5's own literal grep line is now stale unless a future reader
-  knows to substitute `mizan/purification/` for it. `PHASE_6_SPEC.md` §1/§7 already restate the
-  corrected path, but `ULTIMATE_PRD.md` itself is not corrected in place — worth a documentation fix
-  in a future pass rather than leaving every subsequent reader to rediscover the substitution, the
-  same category of "spec cross-reference has silently drifted from the code" item Phase 5's own §6e
-  finding was.
-- **The connection-lifetime bug the executor caught (§3/§5 above) is exactly the kind of thing a
-  literal, non-reading patch-apply would have shipped broken** — worth a standing note for whoever
-  authors Phase 7's own spec pseudocode: any illustrative code sample referencing an earlier phase's
-  file by "insert after line X" should be checked against the ACTUAL committed file's scoping, not
-  assumed from the surrounding prose, since Phase 5's file structure had already shifted where that
-  insertion point actually sat relative to the open connection.
+- **No real report has been generated against the real ~100-ticker universe** — the natural, final-phase
+  restatement of the single most important open item above. Every report this pass or the Phase 7
+  review generated, including the one this comprehension pass itself produced and read (§5 above), was
+  built from invented fixture tickers.
+- **The base64-embedding tradeoff (§3 above) means report file size scales with the number and
+  resolution of embedded plots** — accepted at this phase's own two-plot scope, but worth a future
+  human's attention if a later enhancement (outside V1's own scope) ever added more charts or a
+  higher-resolution render: `render_report`'s own single-file design has no built-in ceiling on how
+  large that one file could grow.
+- **No CLI flag exists to suppress any report section or plot** — a deliberate design choice (§9 of
+  `PHASE_7_SPEC.md`, confirmed: no `--no-plots` or equivalent flag anywhere in
+  `mizan/cli/report.py`'s `add_subparser`), not an oversight — worth restating here only so a future
+  reader does not mistake the absence of such a flag for a missing feature rather than a stated,
+  honesty-preserving boundary.
+- **This is genuinely the last phase of Mizan V1 — no `mizan/reporting/` subpackage split, no Phase 8,
+  and no further phase spec exists or will be drafted as part of this build.** Confirmed by direct read
+  of `PHASE_7_SPEC.md` §0/§9's own explicit statement, and by the absence of any `PHASE_8_SPEC.md` in
+  the repository this pass. The dispatch that follows this comprehension pass writes `BUILD_COMPLETE.md`.
 
-**Carried forward, status re-checked this pass:**
+**What a human (the project owner) should actually do next, now that all seven phases are built and
+reviewed — compiled here because this is the last phase, not generic advice:**
 
-- **The mypy/numpy-outside-.venv gap, and the duckdb-import gap it travels with** — still open, still
-  environment-specific, still not phase-blocking; now also reaches `mizan/purification/ledger.py` and
-  `mizan/purification/attribution.py` in addition to `mizan/backtest/clock.py` and
-  `tests/test_backtest_clock.py`. See §5.
-- **The three escalated fiqh open questions (Q1, Q2, Q3 in `ULTIMATE_PRD.md`)** — still open by
-  design; Phase 6 touches none of them.
-- **All eleven fiqh register entries remain `PENDING_SCHOLARLY_VERIFICATION`** — unchanged; Phase 6
-  does not touch `mizan/config/fiqh_params.py`, only reads register entries #9/#10/#11 (and,
-  indirectly, #8) at runtime.
-- **`PHASE_5_SPEC.md`'s own missing §6e section** — referenced nine times, never written (Phase 5's
-  own honesty audit finding, re-confirmed not yet fixed this pass: `grep -n "§6e" PHASE_5_SPEC.md`
-  still returns the same nine lines, and the file still contains no `## 6e`/`### 6e` header). Still
-  worth fixing directly in the spec file.
-- **The frozen/workable partition adds real complexity to `rebalance()`** that a reviewer or future
-  maintainer needs to understand correctly to avoid accidentally reintroducing the exact bug it
-  prevents (force-selling a grace holding one rebalance early) during a future refactor — flagged
-  here as a maintenance-risk item, not a defect in the current code, unaffected by Phase 6 since
-  `mizan/backtest/clock.py` is untouched.
-- **The grace period's value (`1` rebalance) carries no AAOIFI primary-source citation** — unchanged
-  from Phase 5's own honestly-flagged inference.
-- **The Phase 2 AC15 noqa-enumeration mismatch** — still present, unaffected by Phase 5 or Phase 6.
-- **`LongTermInvestments` remains `[UNVERIFIED]`, and `SIC_TIER_MAP` still has no dedicated
-  gambling/casino Tier-0 code** — both unaffected by Phase 5 or Phase 6, since neither
-  `financial_ratios.py` nor `business_activity.py` is touched.
-- **Corporate-action anomaly scan is deliberately conservative and will produce false positives** —
-  unchanged, still an accepted tradeoff, not a defect.
-- **No real backfill has been run, and no real backtest or purification pass has been run against real
-  market data** — unchanged and, this phase, extended further: everything verified in Phases 1–6 (and
-  their own reviews) is against fixtures and synthetic data, not a full live ~100-ticker run and not a
-  real historical backtest-plus-purification result for any actual strategy.
-- **The DuckDB file remains a local, derived, regenerable artifact with no versioned migration
-  path** — unchanged; Phase 6 adds no new table, column, or index (confirmed: `mizan/data/db.py` is
-  untouched by this phase's diff, and `PHASE_6_SPEC.md` §5 confirms N/A explicitly).
-- **No report or chart exists yet.** `mizan backtest` now prints a purification summary to stdout
-  (`Purification liability: ...`, `Gross return: ...`, `Net-of-purification return: ...`, plus one
-  line per dividend/divestment entry), but there is still no HTML output, no chart, and no `matplotlib`
-  import anywhere in `mizan/` (confirmed by this pass's own grep of `mizan/purification/`, and
-  `PHASE_6_SPEC.md` §9's own explicit non-goal). That remains entirely Phase 7's job.
+1. **Do the real ~100-ticker research.** This is the one gap every phase's own open items have pointed
+   at since Phase 4, and it is now the only thing standing between "a working, tested pipeline" and "a
+   pipeline whose output can be trusted for a real decision." Concretely: pick the real ~100-company
+   universe, and for each one, verify its business-activity classification by hand (not merely trust
+   the generic SIC-first-pass `screen()` already does) — build a real
+   `BusinessActivityOverrideMap` (`mizan/screening/business_activity.py`, already built and tested,
+   ships empty, keyed by CIK, requires a non-empty `rationale` string per entry) rather than relying on
+   the SIC tiering alone for anything genuinely ambiguous.
+2. **Buy a real Tiingo API key and run a real backfill.** `.env.example` already documents
+   `TIINGO_API_TOKEN` as a placeholder; `mizan ingest` is already built, tested, and rate-limited
+   correctly for both EDGAR and Tiingo — nothing in the pipeline needs new code to accept real data,
+   only real credentials and a real run against the real universe from step 1.
+3. **Run `mizan report` end to end against that real data**, once steps 1–2 are done, and actually read
+   the resulting page — the honesty surface (caveats banner, fiqh register) this phase built is
+   designed to make any remaining limitation visible at that point, the same way this comprehension
+   pass's own synthetic-fixture report made every one of this document's own claims checkable rather
+   than merely asserted.
+4. **Get a qualified muamalat scholar to actually rule on the eleven pending fiqh register entries**,
+   per `MASTER_PRD.md` §10's own standing rule ("a muamalat scholar with structural-feasibility
+   expertise rules on these before any of it informs real capital... this sandbox learns the mechanics;
+   it does not rule on them") — every one of the eleven entries is still stamped
+   `pending_scholarly_verification`, unchanged since Phase 1, and nothing in this automated seven-phase
+   build was ever supposed to change that status.
+5. **Consider fixing `PHASE_5_SPEC.md`'s own dangling "§6e" cross-references** (nine references, no
+   section) and correcting `ULTIMATE_PRD.md` §5 check 5's stale `mizan/backtest/purification.py` grep
+   path (the real path is `mizan/purification/`) — small, low-risk documentation cleanups that do not
+   block anything, but would remove the last two known "spec text has silently drifted from the shipped
+   code" gaps this seven-phase build ever produced.
+6. **Treat the shipped `EqualWeightStrategy` as exactly what it is — a reference implementation and
+   testing vehicle, not a real research strategy** — before building or trusting any actual investment
+   decision on top of this substrate; `mizan/backtest/strategy.py`'s own `Strategy` `Protocol` is the
+   extension point for a real strategy, which remains entirely the owner's own future work.
 
 ---
 
@@ -1125,3 +1007,54 @@ like every phase before it, only proves its mechanism works against synthetic fi
 Mizan still implements no actual charitable-donation mechanism of any kind; `purification_liability`
 is a computed, tracked number only. No reporting or chart logic was written; that remains Phase 7's
 job.
+
+**Phase 7 — Reporting (static HTML + plots)** (2026-08-31) — **FINAL PHASE OF MIZAN V1**
+
+Phase 7 gave Mizan its first and only human-readable output artifact, built entirely on top of
+Phases 1–6's untouched foundations and consuming a completed, purified `BacktestResult` for the
+first time as a pure rendering pass, touching no earlier phase's file except one additive two-line
+change to `mizan/cli/main.py`'s own subcommand registration. It shipped a new top-level package,
+`mizan/reporting/`, with `mizan/reporting/report.py` (`ReportInput`, a `MizanBaseModel` that refuses
+construction from a non-purified `BacktestResult`; `CAVEAT_DESCRIPTIONS`, a completeness-asserted
+text registry, one full-sentence description per `Caveat` member; and `render_report`, the phase's
+canonical entry point, whose `active_caveats` parameter is required, keyword-only, and carries no
+default — the single design decision this phase is built around, making "no result renders without
+its caveats" a `TypeError` at the call site and a `mypy --strict` static error, not merely a
+convention) and `mizan/reporting/plots.py` (`matplotlib.use("Agg")` set at import time; two PNG-
+rendering functions, an equity-curve plot comparing gross to net-of-purification portfolio value and
+a purification-liability-by-ticker bar chart, both handling the empty-input case with an honest
+annotated placeholder rather than crashing). `mizan/cli/report.py` completed the
+`ingest | screen | backtest | report` CLI verb set `MASTER_PRD.md` §9.4 names, calling
+`run_backtest` then `purify_backtest_result` with the same connection-reuse discipline
+`mizan/cli/backtest.py` established and Phase 6's own comprehension pass flagged as a lesson for
+future spec authors to get right — heeded here from the start, needing no equivalent fix.
+`matplotlib==3.11.1` was promoted from a forward-declared, unused optional extra (carried since
+Phase 1) to a real core dependency — the first phase to actually import it — after a live
+re-verification against pypi.org confirmed the pin unchanged, logged in
+`docs/modernization_log.md` §6.2c. A new `[[tool.mypy.overrides]]` block was added for
+`module = "numpy.*"` (`follow_imports = "skip"`), resolving a genuine, previously-open-since-Phase-1
+mypy/numpy stub-parsing incompatibility that matplotlib's own promotion would otherwise have
+surfaced for the first time — this comprehension pass independently reproduced the original failure
+and confirmed the fix resolves it, on a real Python installation outside the project's own `.venv`.
+No new fixture ticker was added — the existing sixteen-ticker synthetic universe already exercised
+every code path this phase's plots and tables render. Three new test files added 41 tests (406
+total, all passing) covering caveats-first structural ordering, the required-keyword-argument
+enforcement, verbatim caveat-text rendering, gross/net-of-purification distinctness, full
+eleven-row fiqh-register rendering, well-formed-HTML parsing, inline-base64/single-file plot
+embedding, `ReportInput`'s purification-ledger-required validator, and two genuine end-to-end runs
+against the synthetic fixture (one producing a real nonzero purification liability, one deliberately
+empty-window to reach both plot functions' own placeholder-rendering branches). `ruff check mizan
+tests` is clean under the pinned `ruff==0.16.5` with no new noqa suppressions, and `mypy --strict
+mizan tests` is fully clean inside the project's `.venv` (66 files, up from 59). This comprehension
+pass independently regenerated a real report from the synthetic fixture and read its actual
+rendered content, confirming the caveats-first section order, the verbatim unescaped-apostrophe
+caveat text, the distinct gross/net return figures, the correctly ratio-drift-reflecting purification
+table, and the exactly-two-inline-images/exactly-one-file-on-disk claims empirically rather than by
+trusting the spec's description. **The real ~100-ticker curated universe still does not exist** —
+Phase 7, like every phase before it, proves its mechanism works only against synthetic fixture data,
+and the polished, fully-caveated HTML report this phase can now generate is honestly built on
+invented companies, a limitation the report's own honesty surface is specifically designed to make
+visible to any future reader who points it at real tickers before that research exists. **This is
+the final phase of Mizan V1** — no `mizan/reporting/` subpackage split follows it, and no
+`PHASE_8_SPEC.md` exists or will be drafted; the dispatch immediately following this comprehension
+pass writes `BUILD_COMPLETE.md` instead.
