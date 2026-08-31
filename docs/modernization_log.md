@@ -279,6 +279,19 @@ correspondingly lower, roughly `raw_close / split_factor`, on Tiingo's own conve
 does not additionally re-derive that price-side identity, since `mizan/backtest/portfolio.py` never
 adjusts price, only share count, per `PHASE_5_SPEC.md` §6a's `raw_close`-governs-valuation decision.
 
+### 6.2c Phase 7: `matplotlib` re-verified ahead of its promotion to a real dependency (`mizan/reporting/plots.py`, `PHASE_7_SPEC.md` §2.1)
+
+**Verified live 2026-08-31.** Fetched `https://pypi.org/project/matplotlib/` directly ahead of
+Phase 7 — the first phase that actually imports `matplotlib` — since a stale pin promoted from
+"forward-declared, unused" to "real runtime dependency" without a fresh check would be exactly the
+kind of silent staleness every prior phase's own dependency-promotion step (Phase 2's `httpx`,
+Phase 3's `duckdb`/`pyarrow`, §6.1/§3 above) re-verified before promoting. Latest published release
+remains **3.11.1**, uploaded **2026-07-18** — unchanged from what §3 above already recorded on
+2026-08-30. **Decision: pin stays exactly `matplotlib==3.11.1`, no change.** Logged because this is
+the pin's first *load-bearing* verification (the prior entry recorded it as forward-declared and
+unused; this is the first phase where a stale pin would actually matter to a real import), not
+because anything changed.
+
 ### 6.3 Phase 4: XBRL concept-tag verification (`mizan/screening/financial_ratios.py` §2.2)
 
 Every tag `financial_ratios.py`'s four allow-lists name was checked live 2026-08-30 against real

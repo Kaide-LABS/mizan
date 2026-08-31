@@ -9,6 +9,7 @@ dependencies = [
     "httpx==0.28.1",
     "duckdb==1.5.5",
     "pyarrow==25.0.1",
+    "matplotlib==3.11.1",
 ]
 
 [project.optional-dependencies]
@@ -17,11 +18,10 @@ dependencies = [
 # `pandas` remains forward-declared and unused, same rationale as Phase 1/2: harmless to install, a
 # review-blocking finding to import before its owning phase (PHASE_1_SPEC.md §7, §9;
 # PHASE_2_SPEC.md §5, guard G13/G-DEP1; PHASE_3_SPEC.md §2.2, §7 guard G-DEP3).
+# `report` extra REMOVED in Phase 7 (PHASE_7_SPEC.md §2.1) — `matplotlib` is no longer
+# forward-declared, it is a real Phase 7 dependency (mizan/reporting/plots.py).
 data = [
     "pandas==3.0.5",
-]
-report = [
-    "matplotlib==3.11.1",
 ]
 
 [dependency-groups]
@@ -51,6 +51,18 @@ warn_unused_configs = true
 [[tool.mypy.overrides]]
 module = "pyarrow.*"
 ignore_missing_imports = true
+
+# `numpy` (matplotlib 3.11.1's own transitive dependency, PHASE_7_SPEC.md §2.1's promoted
+# dependency) ships stub files using PEP 695 `type` statement syntax, which requires Python 3.12+
+# to PARSE — incompatible with this project's own declared `python_version = "3.11"` floor above
+# (checked against the floor, not the ceiling, unchanged). `follow_imports = "skip"` stops mypy
+# from parsing numpy's own stub bodies at all (treating its public interface as `Any`) without
+# relaxing `--strict` for any Mizan-owned module — `mizan/reporting/plots.py` never imports numpy
+# directly in any case; this is purely mypy's own transitive resolution of matplotlib's stubs.
+[[tool.mypy.overrides]]
+module = "numpy.*"
+follow_imports = "skip"
+follow_imports_for_stubs = true
 
 [tool.ruff]
 target-version = "py311"
