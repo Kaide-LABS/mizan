@@ -1,0 +1,28 @@
+{
+  "roles": {
+    "planner": { "provider": "claude", "model": "opus" },
+    "researcher": { "provider": "claude", "model": "sonnet" },
+    "crossChecker": { "provider": "claude", "model": "opus" },
+    "builder": { "provider": "codex" },
+    "reviewer": { "provider": "claude", "model": "sonnet" },
+    "lateralArchitecture": { "provider": "codex" },
+    "implication": { "provider": "claude", "model": "opus" },
+    "redTeam": { "provider": "claude", "model": "opus" },
+    "application": { "provider": "claude", "model": "opus" }
+  },
+  "agents": {
+    "redTeamPrompt": {
+      "templateFile": "osa-prompts/red-team.md",
+      "focus": [
+        "Any path by which a hard invariant (spot only with immediate settlement, fully funded with no margin or leverage, no perps/futures/options/CFDs, no lending or yield products, CASH_YIELD = 0, no najsh) could be disabled by configuration, a default, an environment variable or a later change.",
+        "Any order or intent that could be placed without intent to fill (spoofing, layering, najsh), including through the future HFT layer.",
+        "Data provenance: any source that is not public or licensed for our use, since fatwa Q504160 part 2 forbids leaked paid data and signals.",
+        "The token screen: a rejected token (AAVE, COMP, MKR, BNB, OKB, CRO, DOGE, SHIB, PEPE) reaching the backtested universe, or a verdict with no written reason.",
+        "Backtest honesty: survivorship bias, lookahead, zero or too-low fees and slippage, exchange custody and freeze risk not disclosed, results that look good for the wrong reasons.",
+        "The signal-adapter validation gate: a predictive signal driving allocations without out-of-sample testing, calibration, per-token and per-regime error reporting, or without beating the TimesFM/naive baseline; an adapter with undeclared data provenance.",
+        "Report clarity: caveats that exist but are buried, so a non-technical grant judge would not see them."
+      ],
+      "extraInstructions": "The fiqh basis (islamqa.info Q504160) is given: do not contest the ruling itself, attack the implementation. Staking, stablecoins and custody are configurable register parameters with citations, not hard invariants."
+    }
+  }
+}

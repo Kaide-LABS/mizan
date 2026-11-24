@@ -4,9 +4,13 @@ Implements PHASE_1_SPEC.md §4.1, §6.1-§6.3.
 """
 
 import sys
+from typing import TYPE_CHECKING
 
 from mizan.config.fiqh_params import FIQH_PARAMS, FiqhParams, VerificationStatus
 from mizan.config.invariants import INVARIANTS, Invariants
+
+if TYPE_CHECKING:
+    from mizan.crypto.fiqh_register import CryptoFiqhParams
 
 
 class InvariantViolationError(RuntimeError):
@@ -49,6 +53,12 @@ def check_invariants(invariants: Invariants | None = None) -> None:
         violations.append("riba_modeling_allowed must be False")
     if inv.llm_in_compliance_path_allowed:
         violations.append("llm_in_compliance_path_allowed must be False")
+    if not inv.spot_only:
+        violations.append("spot_only must be True")
+    if inv.synthetic_exposure_allowed:
+        violations.append("synthetic_exposure_allowed must be False")
+    if inv.lending_or_yield_allowed:
+        violations.append("lending_or_yield_allowed must be False")
 
     if violations:
         raise InvariantViolationError("; ".join(violations))
@@ -113,6 +123,33 @@ def check_all() -> None:
     """Run ``check_invariants()`` then ``check_fiqh_register()``. Raises on the first failure."""
     check_invariants()
     check_fiqh_register()
+    check_crypto_fiqh_register()
+
+
+def check_crypto_fiqh_register(params: "CryptoFiqhParams | None" = None) -> None:
+    """Assert the four crypto fiqh entries retain their honesty metadata."""
+    from mizan.crypto.fiqh_register import CRYPTO_FIQH_PARAMS
+
+    reg = CRYPTO_FIQH_PARAMS if params is None else params
+    problems: list[str] = []
+    names = list(type(reg).model_fields)
+    if len(names) != 4:
+        problems.append(f"register must have exactly 4 entries, found {len(names)}")
+    entries = [getattr(reg, name) for name in names]
+    ids = [entry.register_id for entry in entries]
+    if sorted(ids) != [1, 2, 3, 4]:
+        problems.append(f"register_id set must be exactly 1..4, got {sorted(ids)}")
+    for name, entry in zip(names, entries, strict=True):
+        if not entry.source.strip():
+            problems.append(f"{name}: source is empty")
+        if entry.status is not VerificationStatus.PENDING_SCHOLARLY_VERIFICATION:
+            problems.append(f"{name}: status is {entry.status!r}, expected pending verification")
+        if not entry.configurable:
+            problems.append(f"{name}: configurable must be True")
+        if entry.register_id == 3 and not entry.primary_source_gap.strip():
+            problems.append(f"{name}: custody entry requires primary_source_gap")
+    if problems:
+        raise FiqhRegisterError("; ".join(problems))
 
 
 def main() -> int:

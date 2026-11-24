@@ -15,7 +15,7 @@ class Invariants(MizanBaseModel):
 
     Source: MASTER_PRD.md §2 INVARIANTS; ULTIMATE_PRD.md §5; baby_prd.md §Boundary.
 
-    Seven fields, exactly. Adding an eighth requires adding its check to
+    Ten fields, exactly. Adding an eleventh requires adding its check to
     ``mizan.config.boot_check.check_invariants`` in the same diff — the deliberately hand-written
     check style makes the omission visible.
     """
@@ -27,6 +27,9 @@ class Invariants(MizanBaseModel):
     margin_allowed: bool = False
     riba_modeling_allowed: bool = False
     llm_in_compliance_path_allowed: bool = False
+    spot_only: bool = True
+    synthetic_exposure_allowed: bool = False
+    lending_or_yield_allowed: bool = False
 
 
 # The single module-level instance every other module imports

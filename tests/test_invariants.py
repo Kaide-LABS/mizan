@@ -134,9 +134,9 @@ def test_invariants_singleton_is_frozen() -> None:
         INVARIANTS.cash_yield = 0.01
 
 
-def test_invariants_has_exactly_seven_fields() -> None:
+def test_invariants_has_exactly_ten_fields() -> None:
     """Seven fields, exactly (PHASE_1_SPEC.md §3.2) — an eighth requires a check-function update."""
-    assert len(Invariants.model_fields) == 7
+    assert len(Invariants.model_fields) == 10
 
 
 def test_invariants_default_values_are_the_safe_defaults() -> None:
@@ -149,3 +149,6 @@ def test_invariants_default_values_are_the_safe_defaults() -> None:
     assert defaults.margin_allowed is False
     assert defaults.riba_modeling_allowed is False
     assert defaults.llm_in_compliance_path_allowed is False
+    assert defaults.spot_only is True
+    assert defaults.synthetic_exposure_allowed is False
+    assert defaults.lending_or_yield_allowed is False
