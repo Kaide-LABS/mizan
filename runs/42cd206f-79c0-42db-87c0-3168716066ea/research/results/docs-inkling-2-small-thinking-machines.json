@@ -1,0 +1,63 @@
+{
+  "summary": "Inkling 2 Small is a real, recently-released (Nov 2026) multimodal Mixture-of-Experts LLM from Thinking Machines Lab (594B total / ~17-18B active parameters, up to 1M-token context), distributed under Apache 2.0 via Hugging Face, the Tinker/Cookbook SDK, and third-party inference hosts including Cloudflare Workers AI. However, nothing in the locked PRD for the crypto Shariah backtest rig (OHLCV ingestion, screening, buy-and-hold backtest, HTML report, signal-adapter contract-only stub) calls for an LLM inference model at all -- there is no stated component, API call, or acceptance criterion that this build would exercise. The build's constraints (free, keyless, public data; no HFT/live/adapter code built yet; signal-adapter is a type/contract only, no implementation) are also incompatible with a 594B-parameter model that requires 500GB+ aggregated GPU VRAM or a paid API tier.",
+  "key_findings": [
+    "Inkling 2 Small is a Mixture-of-Experts multimodal model: 594B total parameters, ~17B (model card) / 18B (Cloudflare) active parameters per token, context window up to 1,048,576 tokens, released per its official model card on 2026-11-05.",
+    "License is Apache 2.0; weights are hosted on Hugging Face at thinkingmachines/Inkling-2-Small.",
+    "Native NVFP4 checkpoint requires >=500GB aggregated VRAM (e.g. 2x NVIDIA B300 or 4x NVIDIA H200); MXFP8 variant requires >=800GB VRAM -- this is datacenter-class hardware, not a laptop/CI box.",
+    "Local/self-hosted serving is via SGLang (`python3 -m sglang.launch_server --model-path thinkingmachines/Inkling-2-Small`), vLLM (`vllm serve thinkingmachines/Inkling-2-Small`), Docker (`docker model run hf.co/thinkingmachines/Inkling-2-Small`), or the `transformers` library (AutoProcessor/AutoModelForMultimodalLM).",
+    "Thinking Machines' own 'Tinker' workflow requires `uv pip install tinker-cookbook` and setting `model_name = \"thinkingmachines/Inkling-2-Small\"`; it depends on a separate `tml_renderers` package for prompt formatting.",
+    "Cloudflare Workers AI hosts it as `@cf/thinkingmachines/inkling-2-small`, exposed via an OpenAI-compatible `/v1/chat/completions` endpoint and the native Cloudflare AI run endpoint; pricing is $0.30/M input tokens, $1.00/M output tokens, $0.10/M cached input tokens, with zero data retention; explicitly NOT available on Cloudflare's free tier -- it requires the Workers Paid plan or prepaid AI Gateway credits.",
+    "No version-history, changelog, or 'breaking changes' section is published on either the Hugging Face model card or the Cloudflare docs page; both state no prior version history is documented for this specific checkpoint.",
+    "No part of this model's API surface (chat/completions, SGLang/vLLM serving, Tinker Cookbook) maps to any acceptance criterion, module, or data flow in the locked crypto Shariah backtest PRD -- there is no ingestion, screening, backtest, or reporting step in that PRD that specifies calling an LLM."
+  ],
+  "recommendations": [
+    "Do not integrate Inkling 2 Small (or any Thinking Machines model) into this build -- it has no role in OHLCV ingestion, fiqh screening, the equal-weight backtest, or HTML report generation as specified, and pulling it in would violate the 'free, keyless, public data' and 'no HFT/live/adapter code' constraints (it needs paid hosting or 500GB+ VRAM).",
+    "If this research item was intended to cover a different dependency (e.g. the LLM used to help author the fiqh-register text, or the coding agent building the repo itself), flag that back to the planner/user for clarification rather than forcing a fit here.",
+    "If a future phase genuinely needs an LLM-backed signal adapter, treat it as out of scope for the current phase: the PRD already specifies the signal-adapter seam is contract/type-only with no implementation, so no model (Inkling or otherwise) should be wired in yet.",
+    "Treat the version/date facts above as correct only as of the pages fetched on 2026-11-24; re-verify before any future use since the Hugging Face and Cloudflare pages carry no changelog and this is a very recently released model."
+  ],
+  "as_of": "2026-11-24 (model card states release date 2026-11-05; no prior version history published)",
+  "sources": [
+    {
+      "title": "Inkling 2 Small Model Card - Thinking Machines Lab",
+      "url": "https://thinkingmachines.ai/model-card/inkling-2-small/",
+      "type": "official-docs",
+      "quote": "Model: Inkling 2 Small; Release Date: November 5, 2026; Provider: Thinking Machines Lab, Inc.; Architecture: 48-layer decoder-only transformer with sparse Mixture-of-Experts (MoE); Parameters: 594B total; 17B active per token"
+    },
+    {
+      "title": "inkling-2-small (Thinking Machines) · Cloudflare Workers AI docs",
+      "url": "https://developers.cloudflare.com/workers-ai/models/inkling-2-small/",
+      "type": "official-docs",
+      "quote": "Model ID: @cf/thinkingmachines/inkling-2-small; Architecture: Mixture-of-Experts with 594B total and 18B active parameters; This model is not available through standard Workers Free billing."
+    },
+    {
+      "title": "thinkingmachines/Inkling-2-Small · Hugging Face",
+      "url": "https://huggingface.co/thinkingmachines/Inkling-2-Small",
+      "type": "official-docs",
+      "quote": "vllm serve \"thinkingmachines/Inkling-2-Small\" ... The model demands a GPU cluster with at least 500GB of aggregated VRAM ... License: Apache 2.0"
+    },
+    {
+      "title": "Using Inkling - Tinker Documentation - Thinking Machines Lab",
+      "url": "https://tinker-docs.thinkingmachines.ai/cookbook/inkling/",
+      "type": "official-docs",
+      "quote": "To set up Inkling, install the Cookbook package: uv pip install tinker-cookbook ... Set model_name = \"thinkingmachines/Inkling-2-Small\" in your Cookbook workflow"
+    }
+  ],
+  "current_version": "Inkling 2 Small [uncertain] -- no explicit semantic version number is published on any official page opened; the model name/checkpoint identifier itself (released 2026-11-05 per the model card) is the only version marker available.",
+  "api_surface": [
+    "None of this build's acceptance criteria call for this API; documented purely because it was the research item -- if ever used it would be: Hugging Face `transformers` AutoModelForMultimodalLM.from_pretrained('thinkingmachines/Inkling-2-Small')",
+    "SGLang server: `python3 -m sglang.launch_server --model-path thinkingmachines/Inkling-2-Small`",
+    "vLLM server: `vllm serve thinkingmachines/Inkling-2-Small`",
+    "Tinker Cookbook: `uv pip install tinker-cookbook`, then `model_name = \"thinkingmachines/Inkling-2-Small\"`",
+    "Cloudflare Workers AI OpenAI-compatible endpoint: POST to `/v1/chat/completions` or `https://api.cloudflare.com/client/v4/accounts/{ACCOUNT_ID}/ai/run/@cf/thinkingmachines/inkling-2-small` (requires paid plan)"
+  ],
+  "pitfalls": [
+    "Requires >=500GB aggregated GPU VRAM (NVFP4) or >=800GB (MXFP8) for self-hosting -- infeasible for a free/local research rig.",
+    "Not available on Cloudflare Workers AI's free billing tier; needs Workers Paid plan or prepaid AI Gateway credits, conflicting with the build's 'free, keyless' data/tooling constraint.",
+    "No published changelog, version history, or breaking-changes notes were found on the Hugging Face card or Cloudflare docs page, so prior-version compatibility risk cannot be assessed from official sources.",
+    "This item appears unrelated to any module, API, or acceptance criterion in the locked PRD; treat as a likely planning mismatch rather than a dependency to integrate."
+  ],
+  "uncertain": [
+    "current_version"
+  ]
+}

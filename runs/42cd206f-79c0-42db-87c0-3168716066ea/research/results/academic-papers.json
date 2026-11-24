@@ -1,0 +1,255 @@
+{
+  "queries": [
+    {
+      "query": "Kutzner 2026 calibration forecasting evaluation",
+      "arxiv": 0,
+      "openalex": 5,
+      "semanticScholar": "skipped",
+      "merged": 5,
+      "relevant": 0,
+      "problems": [
+        "HTTP 429 (rate limited)"
+      ]
+    },
+    {
+      "query": "Chidichimo 2026 out-of-sample forecast validation subgroup error",
+      "arxiv": 0,
+      "openalex": 0,
+      "semanticScholar": "skipped",
+      "merged": 0,
+      "relevant": 0,
+      "problems": [
+        "HTTP 429 (rate limited)"
+      ]
+    },
+    {
+      "query": "Krastev 2025 prompt-framing fragility LLM forecasting",
+      "arxiv": 0,
+      "openalex": 1,
+      "semanticScholar": "skipped",
+      "merged": 1,
+      "relevant": 0,
+      "problems": [
+        "HTTP 429 (rate limited)"
+      ]
+    },
+    {
+      "query": "proper scoring rules calibrated probabilistic forecasting abstention",
+      "arxiv": 0,
+      "openalex": 5,
+      "semanticScholar": "skipped",
+      "merged": 5,
+      "relevant": 1,
+      "problems": [
+        "HTTP 429 (rate limited)"
+      ]
+    },
+    {
+      "query": "financial time-series forecast evaluation beating naive baseline regime",
+      "arxiv": 0,
+      "openalex": 5,
+      "semanticScholar": "skipped",
+      "merged": 5,
+      "relevant": 2,
+      "problems": [
+        "HTTP 429 (rate limited)"
+      ]
+    }
+  ],
+  "papers": [
+    {
+      "title": "Pretrained Time-Series Foundation Models for Financial Return Forecasting",
+      "authors": [
+        "Miquel Noguer I Alonso",
+        "Rodolfo Pereira Franklin"
+      ],
+      "year": 2026,
+      "abstract": "Financial return forecasting is a difficult test case for time-series foundation models (TSFMs) due to low signal-to-noise ratios, structural breaks, heavy tails, and weak persistence. This paper benchmarks pretrained TSFMs against train-from-scratch neural baselines in a deliberately conservative financial setting. We evaluate TimeGPT/TimeGPT-LH, TimesFM-2.5, Moirai-2.0, Chronos, and Chronos-2 against NBEATS, NHITS, PatchTST, iTransformer, and KAN on five liquid U.S. equities (AAPL, AMZN, GOOG, JPM, META) using linear and log returns. Models are compared under an equalized context budget, a rolling-origin protocol, and against random-walk benchmarks. We provide a theoretical framing of pretraining as an inductive prior, linking PAC-Bayes transfer intuition, information-theoretic predictability limits, and attention geometry. This clarifies why strong model rankings need not imply economically meaningful predictability in noisy markets. Pragmatically, pretrained TSFMs dominate the ranking distribution, accounting for 8 of 10 task-level wins. Moirai-2.0 and TimesFM-2.5 achieve the strongest average ranks, leading tasks for AAPL, JPM, GOOG, and AMZN, while Chronos wins the remaining AMZN task. However, the iTransformer baseline wins both META tasks, showing local supervised learning can still outperform generic pretraining for specific assets. Crucially, gains over the random-walk benchmark are small and sparse. A one-sided Diebold-Mariano test rejects equal or inferior predictive accuracy only for Chronos on AMZN and Moirai-2.0 on GOOG. We conclude that TSFMs serve as useful practical priors that reduce model-development costs in low-data financial forecasting, but are not universal engines for statistically reliable alpha generation in realistic empirical deployment.",
+      "doi": "10.48550/arxiv.2606.27100",
+      "arxivId": "2606.27100",
+      "url": "https://doi.org/10.48550/arxiv.2606.27100",
+      "pdfUrl": "https://arxiv.org/pdf/2606.27100",
+      "citedByCount": 8,
+      "references": [
+        "https://openalex.org/W1489262227",
+        "https://openalex.org/W1585160083",
+        "https://openalex.org/W1607372231",
+        "https://openalex.org/W1970789124",
+        "https://openalex.org/W2000842688",
+        "https://openalex.org/W2004095444",
+        "https://openalex.org/W2025720061",
+        "https://openalex.org/W2029029543",
+        "https://openalex.org/W2034489173",
+        "https://openalex.org/W2040759104",
+        "https://openalex.org/W2054723044",
+        "https://openalex.org/W2058699951",
+        "https://openalex.org/W2074884967",
+        "https://openalex.org/W2096904991",
+        "https://openalex.org/W2156939381",
+        "https://openalex.org/W3030163527",
+        "https://openalex.org/W4230058301",
+        "https://openalex.org/W4292671038",
+        "https://openalex.org/W4310416691",
+        "https://openalex.org/W4322718191",
+        "https://openalex.org/W4327810158",
+        "https://openalex.org/W4382239356",
+        "https://openalex.org/W4387355843",
+        "https://openalex.org/W4387427696",
+        "https://openalex.org/W4387561305",
+        "https://openalex.org/W4387796530",
+        "https://openalex.org/W4389664922",
+        "https://openalex.org/W4390041933",
+        "https://openalex.org/W4392781393",
+        "https://openalex.org/W4399424696",
+        "https://openalex.org/W4405059563",
+        "https://openalex.org/W4407838869",
+        "https://openalex.org/W4416013347",
+        "https://openalex.org/W4416536063",
+        "https://openalex.org/W4416716594",
+        "https://openalex.org/W7092613470"
+      ],
+      "sources": [
+        "openalex"
+      ]
+    },
+    {
+      "title": "Narrow Decision Models: A System-1 Architecture for Calibrated, Typed Decisions",
+      "authors": [
+        "Carlos André Antunes",
+        "Aldry Albuquerque",
+        "Gabriel de Melo Schmith",
+        "Natã Batista",
+        "Pedro Oziel Escobar da Silva",
+        "Stefano Benko Rossi",
+        "Lingrid Dietrich Lorenz da Silva",
+        "Flavia Cristina Costa",
+        "Thiago Bertotto",
+        "Luis Fernando Fausto"
+      ],
+      "year": 2026,
+      "abstract": "System One models, introduced with TypeSafe's Jev, answer typed questions about a state with calibrated probabilities instead of generated text: choosing among options described in natural language (Choice), placing the state on an ordered scale (Score), or judging a yes/no statement (Noul). Jev is general-purpose: one set of weights, served as an API and adapted to a domain only through the request. We study the other end of the design space. A Narrow Decision Model (NDM) offers the same interface but is trained for the decisions of one organization, is small enough to run on its own infrastructure, and has an open architecture whose properties can be stated and tested. The state can be any text or structured record about which decisions are made; our running case is the routing of court communications. The architecture serializes a request as a prefix tree (the state, then each question, then each option) and runs a bidirectional encoder under a block attention mask with logical positions, so that each answer is, by construction, invariant to the order of its options and independent of the other questions asked. Routing through an organization chart is a composition of Choice decisions with an explicit \"none of these\" option. We describe training with proper scoring rules through a curriculum, calibration and abstention, decisions composed by rubrics, and a protocol that accepts or rejects the mechanism before held-out data is opened. A minimal validation on public and fictitious data shows that the invariances hold to rounding in a trained model, that a small instance routes on organization charts it has never seen well above lexical retrieval, and that, at equal compute, the block architecture reaches a lower loss than a pairwise cross-encoder. A first instance trained on real legal documents agrees with the LLM classifier in production on 91% of held-out documents.",
+      "doi": "10.48550/arxiv.2610.25553",
+      "arxivId": "2610.25553",
+      "url": "https://doi.org/10.48550/arxiv.2610.25553",
+      "pdfUrl": "https://arxiv.org/pdf/2610.25553",
+      "citedByCount": 6,
+      "references": [
+        "https://openalex.org/W214995755",
+        "https://openalex.org/W1618905105",
+        "https://openalex.org/W1986797382",
+        "https://openalex.org/W2025720061",
+        "https://openalex.org/W2073241381",
+        "https://openalex.org/W2119717200",
+        "https://openalex.org/W2188233853",
+        "https://openalex.org/W2626778328",
+        "https://openalex.org/W2626967530",
+        "https://openalex.org/W2759710969",
+        "https://openalex.org/W2896457183",
+        "https://openalex.org/W2909544278",
+        "https://openalex.org/W2963613748",
+        "https://openalex.org/W2969793176",
+        "https://openalex.org/W2971874326",
+        "https://openalex.org/W3132401450",
+        "https://openalex.org/W4290055968",
+        "https://openalex.org/W4299457904",
+        "https://openalex.org/W4361012985",
+        "https://openalex.org/W4385570090",
+        "https://openalex.org/W4385573342",
+        "https://openalex.org/W4386555476",
+        "https://openalex.org/W4388979610",
+        "https://openalex.org/W4391124766",
+        "https://openalex.org/W4391306138",
+        "https://openalex.org/W4391670445",
+        "https://openalex.org/W4391876619",
+        "https://openalex.org/W4395112660",
+        "https://openalex.org/W4399198340",
+        "https://openalex.org/W4410803261",
+        "https://openalex.org/W4412886823",
+        "https://openalex.org/W4414281281",
+        "https://openalex.org/W4415057273",
+        "https://openalex.org/W4415234743",
+        "https://openalex.org/W4415328901",
+        "https://openalex.org/W6891889810",
+        "https://openalex.org/W7125235063",
+        "https://openalex.org/W7214313011",
+        "https://openalex.org/W7216219899",
+        "https://openalex.org/W7216480538"
+      ],
+      "sources": [
+        "openalex"
+      ]
+    },
+    {
+      "title": "Seeking SOTA: Time-Series Forecasting Must Adopt Taxonomy-Specific Evaluation to Dispel Illusory Gains",
+      "authors": [
+        "Raeid Saqur",
+        "Christoph Bergmeir",
+        "Blanka N. Horvath",
+        "Daniel Schmidt",
+        "Frank Rudzicz",
+        "Terry Lyons"
+      ],
+      "year": 2026,
+      "abstract": "We argue that the current practice of evaluating AI/ML time-series forecasting models, predominantly on benchmarks characterized by strong, persistent periodicities and seasonalities, obscures real progress by overlooking the performance of efficient classical methods. We demonstrate that these \"standard\" datasets often exhibit dominant autocorrelation patterns and seasonal cycles that can be effectively captured by simpler linear or statistical models, rendering complex deep learning architectures frequently no more performant than their classical counterparts for these specific data characteristics, and raising questions as to whether any marginal improvements justify the significant increase in computational overhead and model complexity. We call on the community to (I) retire or substantially augment current benchmarks with datasets exhibiting a wider spectrum of non-stationarities, such as structural breaks, time-varying volatility, and concept drift, and less predictable dynamics drawn from diverse real-world domains, and (II) require every deep learning submission to include robust classical and simple baselines, appropriately chosen for the specific characteristics of the downstream tasks' time series. By doing so, we will help ensure that reported gains reflect genuine scientific methodological advances rather than artifacts of benchmark selection favoring models adept at learning repetitive patterns.",
+      "doi": "10.48550/arxiv.2603.15506",
+      "arxivId": "2603.15506",
+      "url": "https://doi.org/10.48550/arxiv.2603.15506",
+      "pdfUrl": "https://arxiv.org/pdf/2603.15506",
+      "citedByCount": 6,
+      "references": [
+        "https://openalex.org/W1991769471",
+        "https://openalex.org/W2116512828",
+        "https://openalex.org/W2146525523",
+        "https://openalex.org/W2153912717",
+        "https://openalex.org/W2604847698",
+        "https://openalex.org/W2794778778",
+        "https://openalex.org/W2946709941",
+        "https://openalex.org/W2954731415",
+        "https://openalex.org/W2963507686",
+        "https://openalex.org/W2992827897",
+        "https://openalex.org/W3003709258",
+        "https://openalex.org/W3025949386",
+        "https://openalex.org/W3041430681",
+        "https://openalex.org/W3046229894",
+        "https://openalex.org/W3163375505",
+        "https://openalex.org/W3173539742",
+        "https://openalex.org/W3177318507",
+        "https://openalex.org/W3195577433",
+        "https://openalex.org/W4225494949",
+        "https://openalex.org/W4303438998",
+        "https://openalex.org/W4310416691",
+        "https://openalex.org/W4311129667",
+        "https://openalex.org/W4327810158",
+        "https://openalex.org/W4361011349",
+        "https://openalex.org/W4382203079",
+        "https://openalex.org/W4385965698",
+        "https://openalex.org/W4387355843",
+        "https://openalex.org/W4387559560",
+        "https://openalex.org/W4387796530",
+        "https://openalex.org/W4388654737",
+        "https://openalex.org/W4389523787",
+        "https://openalex.org/W4390041933",
+        "https://openalex.org/W4391591184",
+        "https://openalex.org/W4391621391",
+        "https://openalex.org/W4392736840",
+        "https://openalex.org/W4398836644",
+        "https://openalex.org/W4403570643",
+        "https://openalex.org/W4404658388",
+        "https://openalex.org/W4404782449",
+        "https://openalex.org/W4404843835",
+        "https://openalex.org/W4409363808",
+        "https://openalex.org/W4415797141",
+        "https://openalex.org/W4415797292",
+        "https://openalex.org/W6889955440",
+        "https://openalex.org/W7133215398",
+        "https://openalex.org/W7133218509",
+        "https://openalex.org/W7133223873"
+      ],
+      "sources": [
+        "openalex"
+      ]
+    }
+  ],
+  "noneRelevant": false,
+  "notes": []
+}

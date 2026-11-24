@@ -1,0 +1,61 @@
+{
+  "summary": "Use a single wide 'candles' table keyed by (exchange, symbol, granularity, ts) rather than one table per timeframe or per asset class: granularity is just a VARCHAR/ENUM dimension column alongside the OHLCV fields, so adding intraday or order-book-derived bars later means inserting new rows with a different granularity value into the same schema -- no ALTER TABLE or migration. Store ts as native TIMESTAMP (UTC), not VARCHAR, for both correctness and a documented ~10x speed/space win in DuckDB. For idempotent re-ingestion, declare the natural key as a composite PRIMARY KEY/UNIQUE constraint up front (data volume here is tiny -- 14 tokens x a few years of daily bars) and write with DuckDB's native 'INSERT OR REPLACE' (built on ON CONFLICT), which requires that constraint to exist as the conflict target. Keep trades/order-book data in a separate table with its own natural columns (side, level, price, amount) joined by the same (exchange, symbol, ts) convention, rather than cramming it into the OHLCV table; this is the pattern used by existing DuckDB-based crypto market-data projects (vgi-ccxt, the-rule-and-compass) specifically to avoid schema migrations when new granularities or data types are added.",
+  "key_findings": [
+    "DuckDB official performance guide (docs v2.0, 'Schema' page): use native types (BIGINT, DATE, DATETIME) not VARCHAR for columns like timestamps -- on a 554M-row benchmark, DATETIME processed in 0.19s vs 1.85s for VARCHAR (~10x), with 37% smaller storage (3.3 GiB vs 5.3 GiB).",
+    "Same DuckDB guide: 'For best bulk load performance, avoid primary key constraints... if they are required, define them after the bulk loading step' -- their microbenchmark showed loading with PK = 159.3s vs without PK = 45.0s vs load-then-add-PK = 77.5s. At this build's scale (14 symbols x daily bars) this cost is negligible, so defining the composite PK upfront for idempotency is the right tradeoff here.",
+    "DuckDB 'INSERT' statement docs (v1.3): 'INSERT OR REPLACE INTO tbl VALUES (...)' is shorthand for INSERT ... ON CONFLICT DO UPDATE SET col=EXCLUDED.col for every column; 'An ON CONFLICT clause can be used to perform a certain action on conflicts that arise from UNIQUE or PRIMARY KEY constraints' -- i.e. a declared PK/UNIQUE on (exchange, symbol, granularity, ts) is required for idempotent re-runs to work.",
+    "DuckDB date functions docs (v2.0): time_bucket(bucket_width, date[, offset|origin]) truncates a timestamp onto a fixed-width grid (e.g. time_bucket(INTERVAL '2 months', DATE '1992-04-20', INTERVAL '1 month') -> '1992-04-01'); date_trunc(part, date) truncates to a named precision and always returns TIMESTAMP. These are the native tools for deriving coarser candles from finer stored rows without duplicating storage.",
+    "vgi-ccxt (GitHub, Query-farm, DuckDB+CCXT table functions for 100+ exchanges): its ohlcv() function signature returns columns 'exchange, symbol, timeframe, ts, open, high, low, close, volume' -- timeframe/granularity is modeled as a value/column, not a separate table or schema; trades and order-book data are separate functions with their own distinct column shapes (trade_id/side/price/amount/taker_or_maker for trades; side/level/price/amount for order book), joined via (exchange, symbol, ts).",
+    "the-rule-and-compass issue #125 (GitHub, 'first-class OHLCV market-data layer'): proposes a canonical model (timestamp, OHLC, volume, quote volume, trades, taker-buy base/quote) with timeframe and calendar as explicit dimensions; recommends materializing only the timeframes actually used as derived views/aggregates from a canonical finest-grain base table rather than one table per timeframe, explicitly to support adding granularities 'without migration'; stores prices/volume as integer minor units to keep resampling exact; treats calendars as append-only session-ledger tables rather than hardcoded rules.",
+    "jssyxd/multi-asset-ohlcv (GitHub, monthly Parquet shards for 24 assets): uses a directory/partition convention of {SYMBOL}-{INTERVAL}/{SYMBOL}/{YEAR}/{YEAR}_{interval}.parquet with nanosecond-integer UTC timestamps (ts_event, ts_init) and enforces 'zero duplicate timestamps' plus monotonic ts_event <= ts_init ordering as its dedup/causality invariant -- useful as a cache/raw-file-tier convention alongside the DuckDB store, complementing rather than replacing the DB schema."
+  ],
+  "recommendations": [
+    "Create one table, e.g. candles(exchange VARCHAR, symbol VARCHAR, granularity VARCHAR, ts TIMESTAMP, open DOUBLE, high DOUBLE, low DOUBLE, close DOUBLE, volume DOUBLE, source VARCHAR, ingested_at TIMESTAMP, PRIMARY KEY(exchange, symbol, granularity, ts)). Granularity is a plain string value ('1d' today, '1h'/'1m'/'orderbook_snapshot' later) -- this is the whole mechanism that makes the ingestion layer's granularity parameter 'work without code changes' per acceptance criterion 3.",
+    "Write with 'INSERT OR REPLACE INTO candles VALUES (...)' for every ingestion run so re-running the pipeline is idempotent and never duplicates rows; this depends on the PK above existing as the conflict target.",
+    "Keep ts as native UTC TIMESTAMP (bucket start, e.g. midnight UTC for daily bars), never VARCHAR -- matches the documented DuckDB performance/storage advantage and avoids later type-migration pain when intraday timestamps need sub-day precision.",
+    "Do not build per-timeframe tables or per-asset-class tables now. When intraday/order-book data is added later, (a) continue inserting OHLCV rows into the same candles table with a new granularity value, and (b) if/when order-book or trade-level data is needed, add a separate orderbook/trades table keyed by (exchange, symbol, ts, ...) rather than widening candles -- this mirrors the vgi-ccxt and the-rule-and-compass separation and keeps the OHLCV schema stable.",
+    "Favor deriving any coarser candle the pipeline might want later (e.g. a weekly rollup for display) via DuckDB's time_bucket()/date_trunc() over the stored finest-grain rows, instead of pre-materializing and storing every possible granularity -- avoids storage duplication and keeps 'granularity-agnostic' meaning 'one source table, computed views', not 'many stored tables'.",
+    "Given the trivial row count in this build (14 symbols x a few years of daily candles, likely low thousands of rows), do not defer the PRIMARY KEY for bulk-load speed as the general DuckDB guide suggests for large loads -- the correctness/idempotency benefit dominates at this scale; revisit only if/when minute-level or order-book ingestion pushes row counts into the millions.",
+    "Mirror the existing raw-cache file convention (acceptance criterion 2 requires writing to both raw cache and DuckDB) using a path shape keyed by symbol and granularity (e.g. raw/{exchange}/{symbol}/{granularity}/...), consistent with the {SYMBOL}-{INTERVAL} partitioning seen in multi-asset-ohlcv, so the file cache and the DB share the same addressing scheme and neither needs restructuring when new granularities are added."
+  ],
+  "as_of": "DuckDB docs: 'performance/schema' and 'sql/statements/insert' (v1.3/v2.0 branches of duckdb.org/docs) and 'sql/functions/date.html' (v2.0 branch), all accessed 2026-11-24; GitHub repos/issues (Query-farm/vgi-ccxt, a-holm/the-rule-and-compass#125, jssyxd/multi-asset-ohlcv) as retrieved 2026-11-24, reflecting 2024-2025-era design patterns -- no ccxt-specific manual facts were used since that fetch failed (ECONNRESET) and was not independently verified.",
+  "sources": [
+    {
+      "title": "DuckDB Docs -- Performance Guide: Schema",
+      "url": "https://duckdb.org/docs/2.0/guides/performance/schema.html",
+      "type": "official-docs",
+      "quote": "For best bulk load performance, avoid primary key constraints... They very rarely improve the performance of queries as DuckDB does not rely on these indexes for join and aggregation operators."
+    },
+    {
+      "title": "DuckDB Docs -- INSERT Statement",
+      "url": "https://duckdb.org/docs/1.3/sql/statements/insert",
+      "type": "official-docs",
+      "quote": "INSERT OR REPLACE INTO tbl VALUES (1, 84); ... An ON CONFLICT clause can be used to perform a certain action on conflicts that arise from UNIQUE or PRIMARY KEY constraints."
+    },
+    {
+      "title": "DuckDB Docs -- Date Functions (time_bucket, date_trunc)",
+      "url": "https://duckdb.org/docs/2.0/sql/functions/date.html",
+      "type": "official-docs",
+      "quote": "time_bucket(bucket_width, date[, offset]) ... Truncate date to a grid of width bucket_width ... date_trunc(part, date) ... Always returns a TIMESTAMP, even when the input is a DATE."
+    },
+    {
+      "title": "Query-farm/vgi-ccxt (GitHub)",
+      "url": "https://github.com/Query-farm/vgi-ccxt",
+      "type": "repo",
+      "quote": "exchange, symbol, timeframe, ts, open, high, low, close, volume"
+    },
+    {
+      "title": "a-holm/the-rule-and-compass, Issue #125: first-class OHLCV market-data layer",
+      "url": "https://github.com/a-holm/the-rule-and-compass/issues/125",
+      "type": "repo",
+      "quote": "only...timeframes actually used ... materializes derived views from a canonical 1-minute base ... prices as integer ticks and volume as integer minor units"
+    },
+    {
+      "title": "jssyxd/multi-asset-ohlcv (GitHub)",
+      "url": "https://github.com/jssyxd/multi-asset-ohlcv",
+      "type": "repo",
+      "quote": "catalog/data/bar/{SYMBOL}-{INTERVAL}/{SYMBOL}/{YEAR}/{YEAR}_{interval}.parquet ... zero duplicate timestamps"
+    }
+  ],
+  "uncertain": []
+}

@@ -1,0 +1,44 @@
+{
+  "summary": "Coinbase offers two keyless, no-API-key public endpoints that return daily OHLCV candles: the legacy Exchange API `GET https://api.exchange.coinbase.com/products/{product_id}/candles` and the newer Advanced Trade public market-data endpoint `GET https://api.coinbase.com/api/v3/brokerage/market/products/{product_id}/candles` (public endpoints added 2024-04-09). Both expose `security: []` (no auth) in their official OpenAPI specs. For a crypto-first daily-candle ingestion layer with a future-proof granularity parameter, the Advanced Trade public candles endpoint is the better default: it supports a named granularity enum including `ONE_DAY` plus intraday options, returns up to 350 candles per call, and start/end are plain unix-timestamp window bounds rather than a response pagination token, so multi-year history must be built by walking the window backward in a loop.",
+  "key_findings": [
+    "Legacy Coinbase Exchange public candles endpoint `GET https://api.exchange.coinbase.com/products/{product_id}/candles` requires no authentication (OpenAPI `security: []`), per the official CDP API reference.",
+    "Legacy Exchange API granularity enum is in seconds: 60, 300, 900, 3600, 21600, 86400 (1m, 5m, 15m, 1h, 6h, 1d); daily candles use granularity=86400.",
+    "Legacy Exchange API caps each request at a maximum of 300 candles; a start/end+granularity combination yielding more than 300 points is rejected and must be split into multiple sequential requests (no cursor token is returned, only a plain array).",
+    "Official Coinbase Exchange public-endpoint rate limit is 10 requests/second per IP sustained, with bursts allowed up to 15 requests/second per IP, enforced via a token-bucket algorithm, per the official CDP rate-limits documentation.",
+    "The newer Advanced Trade public market-data candles endpoint `GET https://api.coinbase.com/api/v3/brokerage/market/products/{product_id}/candles` also requires no authentication (OpenAPI `security: []`) and was published as part of Coinbase's public market-data endpoints released 2024-04-09.",
+    "Advanced Trade public candles granularity enum is named-string based and includes ONE_MINUTE, FIVE_MINUTE, FIFTEEN_MINUTE, THIRTY_MINUTE, ONE_HOUR, TWO_HOUR, FOUR_HOUR, SIX_HOUR, ONE_DAY; daily candles use granularity=ONE_DAY.",
+    "Advanced Trade public candles endpoint returns up to 350 candles per request (default and max 350 via the `limit` parameter); `start` and `end` are unix timestamps defining the query window, not pagination cursors, so full history requires repeated calls sliding the window backward.",
+    "Neither the Exchange API nor the Advanced Trade API official reference pages state a fixed maximum historical lookback depth (e.g., N years); available depth is bounded only by each product's own listing/trading-start date on Coinbase, so full-history daily backfill must be discovered at run time by walking the window back until responses go empty [uncertain]."
+  ],
+  "recommendations": [
+    "Default the Coinbase fetcher to the Advanced Trade public market-data candles endpoint (`/api/v3/brokerage/market/products/{product_id}/candles`) with granularity=ONE_DAY, since it is the current, documented, keyless public path and its named granularity enum (vs. legacy raw-seconds enum) maps more cleanly onto a future non-daily granularity parameter required by acceptance criterion #3.",
+    "Implement pagination as a backward-walking loop over `start`/`end` unix-timestamp windows (max 350 candles per call on Advanced Trade, 300 on legacy Exchange API) rather than assuming a cursor/next-page token exists in the response — none is documented.",
+    "Add client-side rate limiting/backoff targeting the documented public-endpoint limit of 10 req/s (burst 15 req/s) and handle HTTP 429 with retry/backoff, since both Coinbase API families share this public rate-limit tier.",
+    "Do not assume a fixed maximum history window; discover each token's earliest available daily candle by walking the start/end range backward until the endpoint returns zero candles, and log/report per-token data-start dates for the survivorship-bias warning required in the HTML report.",
+    "For any of the 14 named tokens not listed on Coinbase, or with materially shorter history there than on Kraken, apply the build's documented Kraken-fallback rule rather than silently accepting a short Coinbase series."
+  ],
+  "as_of": "Accessed 2026-11-24 against the current Coinbase Developer Platform (CDP) API reference docs for both the Exchange API and the Advanced Trade API; the Advanced Trade public market-data endpoints are separately documented as introduced on 2024-04-09.",
+  "sources": [
+    {
+      "title": "Get Product Candles - Exchange API Reference - Coinbase Developer Documentation",
+      "url": "https://docs.cdp.coinbase.com/api-reference/exchange-api/rest-api/products/get-product-candles",
+      "type": "official-docs",
+      "quote": "The maximum number of data points for a single request is 300 candles... The allowed granularity values are: {60, 300, 900, 3600, 21600, 86400}... security: [] (no authentication required)"
+    },
+    {
+      "title": "REST Rate Limits Overview - Coinbase Developer Documentation",
+      "url": "https://docs.cdp.coinbase.com/exchange/rest-api/rate-limits",
+      "type": "official-docs",
+      "quote": "Requests per second per IP: 10 (sustained); Burst rate: Up to 15 requests per second per IP, enforced via a token bucket algorithm"
+    },
+    {
+      "title": "Get Public Product Candles - Advanced Trade API Reference - Coinbase Developer Documentation",
+      "url": "https://docs.cdp.coinbase.com/api-reference/advanced-trade-api/rest-api/public/get-public-product-candles",
+      "type": "official-docs",
+      "quote": "security: [] ... Supported granularity values: ONE_MINUTE, FIVE_MINUTE, FIFTEEN_MINUTE, THIRTY_MINUTE, ONE_HOUR, TWO_HOUR, FOUR_HOUR, SIX_HOUR, ONE_DAY ... By default, returns 350 (max 350)"
+    }
+  ],
+  "uncertain": [
+    "key_findings"
+  ]
+}

@@ -1,0 +1,82 @@
+{
+  "summary": "Kraken's public Spot REST market data API is unauthenticated, keyless, and reachable at https://api.kraken.com/0/public/*, which fits the build's 'free, keyless, public' constraint and makes Kraken a valid fallback to Coinbase for the 14 named tokens. The relevant endpoints are Assets, AssetPairs (to resolve tickers/pair names) and OHLC (to fetch candles), with OHLC supporting a minutes-based interval parameter (1,5,15,30,60,240,1440,10080,21600) where 1440 = daily, satisfying the acceptance criterion that ingestion accept a granularity parameter. The critical pitfall for this build is that the OHLC REST endpoint caps results at 720 of the most recent candles regardless of the `since` value — older history cannot be retrieved via this endpoint at all, so for daily candles that is a hard ceiling of ~720 days (~2 years) of backfillable history per call. A confirmed breaking change in the research window: as of 1 Jan 2024 Kraken removed support for POST requests to all public endpoints, so only GET must be used.",
+  "key_findings": [
+    "Base URL for public REST calls: https://api.kraken.com/0/public/ (path-versioned as '0'; Kraken does not publish a separate semantic version number for the REST API itself).",
+    "OHLC endpoint: GET /0/public/OHLC?pair=<PAIR>&interval=<minutes>&since=<unix_ts>. interval accepted values (minutes): 1, 5, 15, 30, 60, 240, 1440, 10080, 21600; 1440 = 1 day.",
+    "OHLC response rows: [time, open, high, low, close, vwap, volume, count]; the last row in the array is always the current, not-yet-closed candle regardless of `since` and must be discarded/handled separately for a 'closed daily candle' dataset.",
+    "OHLC is capped at 720 of the most recent entries per call — older data cannot be retrieved via this endpoint regardless of the `since` value. For daily (1440) interval this is a hard ~720-day history limit via REST OHLC alone.",
+    "Public endpoints require no API key/authentication at all ('no authentication is needed' for public methods).",
+    "Public rate limit: 'Calling the public endpoints at a frequency of 1 per second (or less) would remain within the rate limits.' Trades and OHLC calls are rate-limited by IP address + currency pair; all other public endpoints are rate-limited by IP address only.",
+    "Breaking change (effective 1 Jan 2024, within the research window): POST requests to all public endpoints are no longer supported and now return a 4xx error — GET is required.",
+    "Recent additive changes found in the changelog (2024-2026) are not relevant to plain spot crypto OHLC: a `country_code` AssetPairs param (May 2024), an `asset_class`/`tokenized_asset` param for xStocks support (Aug 2025), `execution_venue` filtering (Apr 2026), and cursor-based pagination added to Ledgers/TradesHistory/ClosedOrders (2026) — none of these affect the basic public OHLC/Assets/AssetPairs calls this build needs.",
+    "AssetPairs (GET /0/public/AssetPairs) and Assets (GET /0/public/Assets) endpoints are used to resolve a token's Kraken pair name/altname (e.g. confirming a ticker like 'XBT' vs 'BTC') before calling OHLC; AssetPairs also exposes `status` which should be checked so delisted/unlisted pairs aren't silently fetched.",
+    "TLS 1.0/1.1 are no longer supported by Kraken's infra; clients must use TLS 1.2+ or may see connection/403 issues (also watch for Cloudflare 'Browser Integrity Check' 403s if the HTTP client doesn't send a normal User-Agent)."
+  ],
+  "recommendations": [
+    "Use Kraken only as the documented fallback when Coinbase lacks a token/history, exactly as the build specifies — implement it against GET /0/public/OHLC with interval=1440 for daily candles.",
+    "Build the granularity parameter directly around Kraken's `interval` enum (1,5,15,30,60,240,1440,10080,21600 minutes) so the 'non-daily without code changes' acceptance criterion maps cleanly onto Kraken's real accepted values; default to 1440.",
+    "Always drop the final row of the OHLC response array (the open/uncommitted candle) before writing to the raw cache / DuckDB store, or daily bars will be understated/incomplete on the most recent day.",
+    "Do not rely on Kraken REST OHLC alone for deep backfills: since it returns at most 720 of the most recent candles and ignores `since` beyond that window, any daily history older than ~2 years from today is unavailable through this endpoint — document this as a known data limitation in the report rather than assuming Coinbase+Kraken together guarantee arbitrarily long history.",
+    "Only ever issue GET requests to Kraken public endpoints (never POST) — this has been a hard requirement since 1 Jan 2024.",
+    "Throttle Kraken public calls to no more than ~1/second per IP+pair (for Trades/OHLC) to stay under the published rate limit, and add basic retry/backoff on 'EService: Throttled' responses.",
+    "Resolve each of the 14 tokens' Kraken pair name via AssetPairs/Assets first (don't hardcode guessed pair strings), and check pair `status` to avoid silently ingesting from a delisted or non-tradable pair."
+  ],
+  "as_of": "Documentation reviewed as of 2026-11-24; changelog entries observed up to September/October 2026; the Jan 2024 POST-removal breaking change falls inside the requested 2024-prioritised window.",
+  "sources": [
+    {
+      "title": "Get OHLC Data — Kraken Developers (official REST API reference)",
+      "url": "https://docs.kraken.com/api/docs/rest-api/get-ohlc-data",
+      "type": "official-docs",
+      "quote": "Returns up to 720 of the most recent entries (older data cannot be retrieved, regardless of the value of since). ... interval (integer, default: 1): Time frame in minutes — Valid values: 1, 5, 15, 30, 60, 240, 1440, 10080, 21600."
+    },
+    {
+      "title": "Spot REST Rate Limits — Kraken Developers",
+      "url": "https://docs.kraken.com/exchange/guides/rest/ratelimits",
+      "type": "official-docs",
+      "quote": "Kraken implements a 'call counter' system... 'EAPI:Rate limit exceeded' – counter exceeded maximum; 'EService: Throttled: [UNIX timestamp]' – too many concurrent requests."
+    },
+    {
+      "title": "What are the API rate limits? — Kraken Support",
+      "url": "https://support.kraken.com/articles/206548367-what-are-the-api-rate-limits-",
+      "type": "official-docs",
+      "quote": "The Spot public endpoints are rate limited by IP address and currency pair for calls to Trades and OHLC, and by IP address only for calls to all other public endpoints... Calling the public endpoints at a frequency of 1 per second (or less) would remain within the rate limits."
+    },
+    {
+      "title": "Advanced API FAQ — Kraken Support",
+      "url": "https://support.kraken.com/articles/advanced-api-faq",
+      "type": "official-docs",
+      "quote": "If you only intend to make calls to public methods, then you may choose to opt out of client libraries as no authentication is needed... we have recently dropped support for TLS 1.0 and 1.1."
+    },
+    {
+      "title": "Exchange Changelog — Kraken Developers",
+      "url": "https://docs.kraken.com/exchange/changelog",
+      "type": "official-docs",
+      "quote": "Kraken 'removed support for POST requests to all public endpoints' as of January 1, 2024, requiring GET-only access for market data."
+    },
+    {
+      "title": "kraken-swagger-validated.json (community-maintained OpenAPI spec mirror of Kraken public endpoints)",
+      "url": "https://gist.github.com/maliky/03de5e2a1664ec8df5a665c517d0d151",
+      "type": "repo",
+      "quote": "Path: /public/OHLC ... Response Schema: Returns array of tick data with structure: [time, open, high, low, close, vwap, volume, count]."
+    }
+  ],
+  "current_version": "Kraken Spot REST API does not use semantic versioning for the public surface; all endpoints documented here are served under the stable path prefix /0/public/ (e.g. https://api.kraken.com/0/public/OHLC) with an optional per-endpoint `assetVersion` query param (only value `1` supported as of this review) [uncertain]",
+  "api_surface": [
+    "GET https://api.kraken.com/0/public/OHLC?pair=<PAIR>&interval=1440&since=<unix_ts> — daily (and future non-daily) candle fetch",
+    "GET https://api.kraken.com/0/public/AssetPairs?pair=<PAIR> — resolve/validate a token's tradable pair name and status before fetching OHLC",
+    "GET https://api.kraken.com/0/public/Assets?asset=<ASSET> — resolve canonical asset/altname mapping for a token symbol",
+    "interval parameter values (minutes): 1, 5, 15, 30, 60, 240, 1440, 10080, 21600 — used for the granularity-parameter interface requirement",
+    "since parameter (unix timestamp) for incremental polling, bounded by the 720-row recency cap"
+  ],
+  "pitfalls": [
+    "OHLC endpoint returns at most 720 of the most recent candles regardless of `since` — no way to backfill older daily history via this endpoint; for 1440-minute interval this is a hard ~720-day (~2 year) ceiling.",
+    "As of 1 Jan 2024, POST requests to Kraken public endpoints are rejected (4xx) — GET is mandatory.",
+    "The last entry of every OHLC response array is the current, still-open candle and will always be present; treating it as a closed daily bar will corrupt the most recent day's data.",
+    "Public OHLC/Trades calls are rate-limited per IP+pair (not just per IP), so parallel fetchers hitting many pairs from the same IP can still be throttled even though each individual pair looks under 1 req/sec.",
+    "Dropped TLS 1.0/1.1 support and Cloudflare bot-integrity checks can cause opaque 403/connection errors if the HTTP client is misconfigured (no modern TLS, missing/odd User-Agent) — unrelated to API logic but can look like an API outage.",
+    "Recent additive params (`asset_class`/`tokenized_asset` for xStocks, `country_code`, `execution_venue`) target non-crypto or institutional use cases and should be left untouched/omitted for this build's plain spot-crypto pairs to avoid unintended filtering."
+  ],
+  "uncertain": [
+    "current_version"
+  ]
+}

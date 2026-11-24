@@ -1,0 +1,69 @@
+{
+  "summary": "TimesFM's official documentation lives in the google-research/timesfm GitHub repo and the corresponding Hugging Face model cards. The current stable release is TimesFM 3.0 (PyPI package timesfm 3.0.2, HF checkpoint google/timesfm-3.0-pytorch), but its pretrained weights are now restricted to a non-commercial license; the prior checkpoint, TimesFM 2.5 (google/timesfm-2.5-200m-pytorch), keeps the original Apache-2.0 weight license and is the more appropriate choice for this free/keyless research-only build if TimesFM is ever wired in as the 'naive baseline' comparator required by the validation-gate spec (acceptance criterion 12). Installation is a plain `pip install timesfm[torch]` (no API key), and the 2.5 API is `from_pretrained` -> `compile(ForecastConfig(...))` -> `forecast(horizon, inputs)`. For this build, which only needs to document the validation-gate requirement to 'beat TimesFM/naive baseline' and build no implementation, the key documentation facts are: exact package/checkpoint name, context/horizon limits, and the 1.0->2.5 API/license breaking changes.",
+  "key_findings": [
+    "Current stable PyPI package is timesfm 3.0.2; HF collection shows checkpoints 1.0 (200M, context 512), 2.0 (500M, context 2,048), 2.5 (200M, context up to 16,384, horizon up to 1,000 via continuous quantile head), and 3.0 (~0.3B params, native multivariate/covariate support, context up to ~15,360).",
+    "TimesFM 2.5 removed the mandatory 'freq' (frequency) categorical argument ({0,1,2}) that was required in 1.0 and 2.0 -- confirmed directly in the official GitHub README ('gets rid of the frequency indicator').",
+    "API class names changed across versions and are not drop-in compatible: 1.0 used a `TimesFm` class, 2.5 uses `timesfm.TimesFM_2p5_200M_torch.from_pretrained(...)` + `.compile(ForecastConfig(...))` + `.forecast(horizon, inputs)`, and 3.0 introduces `TimesFM3Evaluator`/`ModelConfig` with multivariate covariate inputs.",
+    "License split: source code is Apache-2.0 across all versions, and model weights for 1.0 through 2.5 are Apache-2.0, but TimesFM 3.0's pretrained weights are under a separate 'timesfm-non-commercial-license-v1.0' that prohibits self-hosted commercial/production use (only permitted via Google Cloud BigQuery ML / Vertex Model Garden).",
+    "The TimesFM-2.5-200M-pytorch model card's own usage example configures `max_context=1024, max_horizon=256`, which is far below the architecture's stated ceiling of context<=16,384 / horizon<=1,000 -- these are configurable `ForecastConfig` values, not hard model limits.",
+    "Every HF checkpoint card states: 'This checkpoint is not an officially supported Google product.'",
+    "Installation requires no API key (`pip install timesfm[torch]`, or `pip install timesfm[mlx]` on Apple Silicon), but it does pull multi-hundred-MB model weights from Hugging Face on first run, which is a network dependency distinct from the 'free, keyless' market-data constraint in this build."
+  ],
+  "recommendations": [
+    "If/when the validation-gate spec needs a concrete TimesFM reference, name TimesFM 2.5 (`google/timesfm-2.5-200m-pytorch`, installed via `pip install timesfm[torch]`) rather than 3.0, because its weights are unambiguously Apache-2.0 -- avoids any licensing question for a free/public research-only tool; 3.0's non-commercial weight license is a new complication worth flagging but not needed for this build.",
+    "Since this build only requires the validation-gate specification to state 'must beat TimesFM/naive baseline' (no adapter implementation yet), document the exact pinned package version and checkpoint id (e.g. `timesfm==2.5.x`, `google/timesfm-2.5-200m-pytorch`) in the architecture/plan docs now, so a future implementer isn't exposed to the 1.0/2.0/2.5/3.0 API churn.",
+    "Do not port any 1.0/2.0-style code that passes a `freq` argument -- the 2.5 API removed it entirely and will error or behave unexpectedly if treated as an optional parameter.",
+    "Note in docs that TimesFM's own weight download (from Hugging Face, no key required) is a one-time setup dependency separate from the 'free, keyless, public' market-data sourcing rule -- it should not be conflated with the Coinbase/Kraken ingestion constraint.",
+    "If an adapter implementation is ever built, explicitly size `ForecastConfig(max_context=..., max_horizon=...)` to the real OHLCV window rather than relying on the model card's small example defaults (1024/256), since the real ceiling is much higher (16,384/1,000)."
+  ],
+  "as_of": "Checked 2026-11-24. PyPI timesfm package version 3.0.2 (released ~Sep 2026 per PyPI); HF checkpoint google/timesfm-2.5-200m-pytorch last updated Oct 2, 2025; HF checkpoint google/timesfm-3.0-pytorch listed as updated 'Sep 2' (2026) in the HF collection page; GitHub README reviewed live at the same date.",
+  "sources": [
+    {
+      "title": "google-research/timesfm (official GitHub repository README)",
+      "url": "https://github.com/google-research/timesfm",
+      "type": "official-docs",
+      "quote": "pip install timesfm[torch] ... TimesFM 2.5 ... gets rid of the frequency indicator ... supports up to 16k context length, up from 2048 ... TimesFM 3.0 pretrained weights are distributed under the separate timesfm-non-commercial-license-v1.0 license and are restricted to non-commercial, non-production use."
+    },
+    {
+      "title": "google/timesfm-2.5-200m-pytorch (Hugging Face model card)",
+      "url": "https://huggingface.co/google/timesfm-2.5-200m-pytorch",
+      "type": "official-docs",
+      "quote": "max_context=1024, max_horizon=256 ... This checkpoint is not an officially supported Google product. ... license: apache-2.0"
+    },
+    {
+      "title": "google/timesfm-1.0-200m-pytorch (Hugging Face model card)",
+      "url": "https://huggingface.co/google/timesfm-1.0-200m-pytorch",
+      "type": "official-docs",
+      "quote": "Both forecast methods expect (1) the input time series contexts, (2) along with their frequencies ... a max context length of 512 ... Please visit our GitHub repo and follow the instructions there to install the timesfm library."
+    },
+    {
+      "title": "timesfm · PyPI",
+      "url": "https://pypi.org/project/timesfm/",
+      "type": "official-docs",
+      "quote": "a pretrained time-series foundation model developed by Google Research for time-series forecasting ... Extras: torch, mlx, flax, xreg"
+    },
+    {
+      "title": "TimesFM Release collection (Hugging Face)",
+      "url": "https://huggingface.co/collections/google/timesfm-release-66e4be5fdb56e960c1e482a6",
+      "type": "official-docs",
+      "quote": "google/timesfm-3.0-pytorch ... 0.3B params ... google/timesfm-2.5-200m-pytorch ... updated Oct 2, 2025 ... google/timesfm-1.0-200m-pytorch ... updated Aug 29, 2024"
+    }
+  ],
+  "current_version": "TimesFM 3.0 (PyPI package timesfm 3.0.2, checkpoint google/timesfm-3.0-pytorch); prior Apache-2.0-licensed checkpoint TimesFM 2.5 (google/timesfm-2.5-200m-pytorch) remains available and is the recommended reference for this build",
+  "api_surface": [
+    "pip install timesfm[torch]  (keyless, open-weights; pip install timesfm[mlx] for Apple Silicon)",
+    "import timesfm; model = timesfm.TimesFM_2p5_200M_torch.from_pretrained(\"google/timesfm-2.5-200m-pytorch\")",
+    "model.compile(timesfm.ForecastConfig(max_context=<window_len>, max_horizon=<horizon>, normalize_inputs=True, use_continuous_quantile_head=True, fix_quantile_crossing=True))",
+    "point_forecast, quantile_forecast = model.forecast(horizon=H, inputs=[series])  -- used only as the referenced 'naive baseline/TimesFM' comparator named in the validation-gate spec (criterion 12); no implementation is built in this phase",
+    "No freq/frequency argument in the 2.5 API (present and required as {0,1,2} in 1.0/2.0)"
+  ],
+  "pitfalls": [
+    "Breaking change: TimesFM 2.5 removed the mandatory 'freq' categorical argument used by 1.0/2.0 -- code written against the older API will not match the 2.5 call signature.",
+    "API class names are not stable across versions (TimesFm -> TimesFM_2p5_200M_torch -> TimesFM3Evaluator); pin an exact package version and checkpoint id rather than following generic 'timesfm' examples.",
+    "TimesFM 3.0's pretrained weights carry a non-commercial-only license (timesfm-non-commercial-license-v1.0); self-hosted commercial/production use is prohibited, only Google Cloud BigQuery ML/Vertex deployments are permitted commercially -- 2.5 and earlier weights remain Apache-2.0 and are safer for an openly licensed research tool.",
+    "Model card example configs understate the model's real ceiling (example shows max_context=1024/max_horizon=256 while the architecture supports up to 16,384 context / 1,000 horizon) -- must be explicitly configured, not assumed from the quickstart snippet.",
+    "All HF checkpoints are explicitly marked 'not an officially supported Google product' -- no support SLA.",
+    "First run downloads multi-hundred-MB weights from Hugging Face; this is a network dependency even though no API key or payment is required, which should not be conflated with the build's 'free, keyless, public' market-data sourcing rule."
+  ],
+  "uncertain": []
+}

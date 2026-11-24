@@ -1,0 +1,45 @@
+{
+  "summary": "\"gods-eye-view\" (github.com/bilawalsidhu/gods-eye-view) is an open-source, browser-based 3D geospatial intelligence globe that visualizes live public flights, ships, satellites, weather, earthquakes, and street/traffic cameras using CesiumJS, Vue 3, and Google Photorealistic 3D Tiles. It is unrelated to cryptocurrency price data, Shariah screening, backtesting, or OHLCV ingestion of any kind, and has no overlap with the Mizan crypto-Shariah-backtest build's requirements (Coinbase/Kraken OHLCV fetch, DuckDB storage, fiqh screening, equal-weight backtest, HTML report, hard-rule invariants, signal-adapter contract). There is no legitimate API surface from this project for this build to consume; it is a geospatial visualization app, not a financial-data or backtesting library.",
+  "key_findings": [
+    "Official repo is bilawalsidhu/gods-eye-view on GitHub, tagline: 'a spy satellite simulator in your browser, except the data is real', official site godseyeview.ai",
+    "Requires Node.js 24.14.0+ or 26.x; install via `git clone`, `npm ci`, `npm run dev`, or via Pinokio desktop app 8.2+, or `docker compose up`",
+    "App serves locally at http://localhost:4173 and requires no API keys to start exploring at a basic level",
+    "It integrates 23 live-data layers: no-key sources (OpenSky flights, adsb.lol, USGS earthquakes, CelesTrak satellites, OSRM, NOAA/ECMWF weather, OSM-based ALPR cameras, NASA FIRMS fires), free-key-tier sources (AISStream ships, TomTom traffic, Cesium ion terrain, Mapillary, World News API), and metered-key sources (Google Maps 3D tiles/place search, OpenAI voice/chat)",
+    "API keys, when needed for free-key or metered layers, are configured via an in-app 'POWER UP' panel or a repository-root .env file; none of these keys relate to financial/crypto data providers",
+    "The README notes that older builds fail against OpenStreetMap Overpass servers for the Traffic/Mapped Installations layers and recommends updating to the latest version to restore them",
+    "Core stack is Vue 3, Pinia, CesiumJS, and Vite — a frontend geospatial visualization stack, not a data-ingestion, backtesting, or quant-finance library",
+    "No cryptocurrency, OHLCV, exchange, or Shariah/fiqh-related functionality exists anywhere in this project's documented feature set or API list"
+  ],
+  "recommendations": [
+    "Do not integrate gods-eye-view into the Mizan build in any form; it provides no OHLCV/exchange/finance API and has no bearing on acceptance criteria 1-15",
+    "Treat this research item as a mismatch between the planner's item name and the actual build requirements; flag to the planner that 'gods-eye-view' does not correspond to any dependency needed for crypto OHLCV ingestion, DuckDB storage, Shariah screening, backtesting, or the signal-adapter contract",
+    "For the actual build, continue sourcing OHLCV data from Coinbase (primary) and Kraken (fallback) as already locked in the PRD — this item surfaced no alternative or complementary data source worth adopting",
+    "If the planner intended a different tool (e.g., a monitoring/dashboard library with a similar name), re-issue the research item with the correct, verified tool name before relying on any findings here"
+  ],
+  "as_of": "README.md content as fetched 2026-11-24; repository described as released under MIT license on 2026-08-24",
+  "sources": [
+    {
+      "title": "bilawalsidhu/gods-eye-view README.md",
+      "url": "https://github.com/bilawalsidhu/gods-eye-view/blob/main/README.md",
+      "type": "official-docs",
+      "quote": "God's Eye View is an open-source, browser-based 3D globe that visualizes real-time public signals including aircraft, ships, satellites, weather, and public cameras... requires no API keys to begin exploring."
+    },
+    {
+      "title": "GitHub - bilawalsidhu/gods-eye-view",
+      "url": "https://github.com/bilawalsidhu/gods-eye-view",
+      "type": "repo",
+      "quote": "God's Eye View: a spy satellite simulator in your browser, except the data is real. Live open source spatial intelligence on a photorealistic 3D globe. Official site: godseyeview.ai"
+    }
+  ],
+  "current_version": "No numbered stable release found; distributed as a continuously updated main-branch repo (Node 24.14.x/26.x compatible, MIT-licensed as of 2026-08-24) — not applicable to this build",
+  "api_surface": [
+    "Not applicable: this project exposes no financial-data, exchange, backtesting, or Shariah-screening API and will not be called by the Mizan build",
+    "If ever embedded only as an unrelated visualization demo (out of scope), its only relevant surface is `npm run dev` (local Vite dev server on :4173) and optional `.env` keys for OpenSky/AISStream/TomTom/Cesium ion/Mapillary/Google Maps/OpenAI — none of which are financial data providers"
+  ],
+  "pitfalls": [
+    "Entirely unrelated domain (geospatial/ADS-B/AIS/satellite tracking) to the crypto-Shariah backtest build; adopting it would violate the PRD's constraint that data sources be relevant, free, keyless, and licensed for OHLCV ingestion",
+    "Project requires Node 24.14+/26.x and, for several layers, third-party API keys (TomTom, Cesium ion, Mapillary, World News API, Google Maps, OpenAI) that are out of scope and unrelated to Coinbase/Kraken OHLCV",
+    "Older builds reportedly break against OpenStreetMap Overpass endpoints for specific layers — irrelevant to this build but noted as the only documented 'breaking change' in the project's README"
+  ],
+  "uncertain": []
+}

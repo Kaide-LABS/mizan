@@ -1,0 +1,19 @@
+{
+  "queries": [
+    "crypto OHLCV backtest equal-weight buy-and-hold python duckdb",
+    "halal shariah crypto screening token business activity",
+    "pluggable signal adapter backtest interface calibration abstention",
+    "spot-only no-leverage order intent model anti-spoofing"
+  ],
+  "repos": [],
+  "summary": null,
+  "notes": [
+    "No public repositories matched the prior-art queries."
+  ],
+  "problems": [
+    "search \"crypto OHLCV backtest equal-weight buy-and-hold python duckdb\": HTTP 401: {\r\n  \"message\": \"Bad credentials\",\r\n  \"documentation_url\": \"https://docs.github.com/rest\",\r\n  \"status\": \"401\"\r\n}",
+    "search \"halal shariah crypto screening token business activity\": HTTP 401: {\r\n  \"message\": \"Bad credentials\",\r\n  \"documentation_url\": \"https://docs.github.com/rest\",\r\n  \"status\": \"401\"\r\n}",
+    "search \"pluggable signal adapter backtest interface calibration abstention\": HTTP 401: {\r\n  \"message\": \"Bad credentials\",\r\n  \"documentation_url\": \"https://docs.github.com/rest\",\r\n  \"status\": \"401\"\r\n}",
+    "search \"spot-only no-leverage order intent model anti-spoofing\": HTTP 401: {\r\n  \"message\": \"Bad credentials\",\r\n  \"documentation_url\": \"https://docs.github.com/rest\",\r\n  \"status\": \"401\"\r\n}"
+  ]
+}

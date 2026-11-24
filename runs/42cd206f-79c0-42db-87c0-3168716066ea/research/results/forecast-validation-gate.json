@@ -1,0 +1,45 @@
+{
+  "summary": "To credibly claim a signal beats a naive/TimesFM baseline rather than overfitting, the validation gate needs: (1) proper scoring rules evaluated out-of-sample -- CRPS or pinball/quantile loss for probabilistic forecasts, not just MAE/MSE on point forecasts; (2) explicit calibration checks (e.g. PIT histograms / reliability diagrams) since foundation models are known to be miscalibrated, especially at longer horizons; (3) a leakage-safe out-of-sample protocol -- purged and embargoed walk-forward or combinatorial purged cross-validation (CPCV) rather than naive shuffled k-fold, which is shown to produce artificially inflated scores on time series; (4) statistical significance testing of the signal versus baseline via a one-sided Diebold-Mariano test on forecast errors, plus Probabilistic/Deflated Sharpe Ratio and Probability of Backtest Overfitting (PBO) if the validation extends to strategy-level returns, to correct for multiple-testing/selection bias; and (5) per-asset and per-regime breakdowns, since aggregate-level 'beats baseline' claims can hide near-total failure on most individual series. A 2026 benchmark of pretrained time-series foundation models (including TimesFM-2.5) on financial returns found gains over a zero-return random-walk baseline were 'small and sparse,' with Diebold-Mariano rejecting the null of equal-or-worse accuracy for only 2 of many model/asset pairs -- i.e. aggregate improvement claims did not hold up per-asset.",
+  "key_findings": [
+    "arXiv:2606.27100 (2026) benchmarks TimesFM-2.5, TimeGPT, Moirai-2.0, Chronos/Chronos-2 against train-from-scratch NBEATS/NHITS/PatchTST/iTransformer/KAN on 5 liquid US equities, using a zero-return random walk and a weekly seasonal naive as baselines, and MAE as the primary point-forecast metric because it is 'robust to the heavy tails of daily equity returns.'",
+    "The same paper uses pinball/quantile loss for probabilistic model outputs (e.g. Moirai-2.0), stating that averaged pinball loss approximates CRPS, 'a strictly proper scoring rule for one-dimensional predictive distributions' -- i.e. it recommends CRPS/pinball loss over plain MSE for evaluating probabilistic signals.",
+    "arXiv:2606.27100 finding: 'gains over the random-walk benchmark are small and sparse. A one-sided Diebold-Mariano test rejects equal or inferior predictive accuracy only for Chronos on AMZN and Moirai-2.0 on GOOG' -- out of many model/asset combinations, almost none statistically beat the naive baseline, which is direct evidence that aggregate benchmark tables can overstate real predictive edge unless broken down per-asset and tested for significance.",
+    "The same paper's conclusion is that TSFMs are 'useful practical priors that reduce model-development costs... but not as universal engines of statistically reliable alpha generation' -- supporting a validation gate that defaults to skepticism of foundation-model signals absent per-asset significance testing.",
+    "The purged-cross-validation / purgedcv library (eslazarev) demonstrates that naive shuffled k-fold CV on time series can report R^2 = 0.83-0.91 on a target that is completely unpredictable, while purging overlapping-window training rows and applying an embargo period correctly reveals R^2 below zero -- demonstrating that leakage-safe splitting is a prerequisite for any valid out-of-sample claim, not an optional refinement.",
+    "The same library implements Combinatorial Purged Cross-Validation (CPCV), which builds C(N,K) fold combinations into multiple distinct out-of-sample backtest paths, plus Probabilistic Sharpe Ratio (PSR), Deflated Sharpe Ratio (DSR), and Probability of Backtest Overfitting (PBO) to adjust performance claims for multiple-testing/selection bias when many strategy variants are tried.",
+    "A 2024 Knowledge-Based Systems study (via ScienceDirect/SSRN) compares CPCV against k-fold, purged k-fold, and walk-forward out-of-sample testing in a synthetic controlled environment and reports CPCV ahead of the alternatives on both backtest-overfitting probability and Deflated Sharpe Ratio, i.e. CPCV is the stronger choice among these when ranking strategy-level out-of-sample validity [uncertain -- derived from search-result summary of the paper, not a fully opened primary read of the paper's own results tables]."
+  ],
+  "recommendations": [
+    "Define the signal-adapter validation gate (criterion 12) to require: realised-price comparison via a proper scoring rule (CRPS or pinball/quantile loss) in addition to any point-accuracy metric, since point metrics alone do not reveal calibration quality.",
+    "Require an explicit calibration report (e.g. PIT/reliability diagram or coverage of stated confidence intervals) as part of the validation gate output, not just a scalar score, because TSFMs are documented to be miscalibrated and calibration quality degrades with forecast horizon.",
+    "Specify per-token AND per-regime error breakdowns as a gate requirement, not an aggregate pass/fail -- the cited benchmark shows an aggregate-looking improvement can collapse to near-zero significance once broken out per asset.",
+    "Mandate a purged/embargoed out-of-sample split (walk-forward at minimum; CPCV if resourcing allows) rather than ordinary k-fold or random train/test splits, given documented leakage-driven false positives on time series.",
+    "Require a formal significance test of signal-vs-baseline forecast errors (e.g. Diebold-Mariano) before a signal is allowed to 'beat' the naive/TimesFM baseline claim in any report; a smaller MAE/CRPS alone is not sufficient evidence given how often such gains were not statistically significant in the cited benchmark.",
+    "Keep the validation-gate spec (criterion 12) as documentation only at this phase per the locked build scope -- do not implement CPCV/DSR/PBO tooling now, since no adapter or live signal code is to be built; simply reference these as the required methodology for when adapters are built later.",
+    "Treat TimesFM/naive-baseline-beating as a high bar: per the cited 2026 paper, well-known pretrained TSFMs rarely clear this bar on financial return series, so the gate's naive/TimesFM baseline should be treated as a genuinely strong null, not a token comparison."
+  ],
+  "as_of": "2026-11-24 (web search/fetch date); primary paper arXiv:2606.27100 dated 2026; purgedcv repo and CPCV/DSR/PBO description as currently published on GitHub; Knowledge-Based Systems CPCV comparison study is 2024",
+  "sources": [
+    {
+      "title": "Pretrained Time-Series Foundation Models for Financial Return Forecasting",
+      "url": "https://arxiv.org/html/2606.27100",
+      "type": "paper",
+      "quote": "gains over the random-walk benchmark are small and sparse. A one-sided Diebold-Mariano test rejects equal or inferior predictive accuracy only for Chronos on AMZN and Moirai-2.0 on GOOG."
+    },
+    {
+      "title": "purged-cross-validation (purgedcv): scikit-learn-compatible time-series cross-validation with purging, embargo, CPCV, and deflated Sharpe ratios",
+      "url": "https://github.com/eslazarev/purged-cross-validation",
+      "type": "repo",
+      "quote": "naive shuffled k-fold reported R2 = 0.83-0.91 on a completely unpredictable target, while purged k-fold correctly revealed R2 below zero."
+    },
+    {
+      "title": "Backtest overfitting in the machine learning era: A comparison of out-of-sample testing methods in a synthetic controlled environment",
+      "url": "https://www.sciencedirect.com/science/article/abs/pii/S0950705124011110",
+      "type": "article",
+      "quote": "Combinatorial Purged Cross-Validation (CPCV) outperforming traditional methods as evidenced by its lower Probability of Backtest Overfitting (PBO) and superior Deflated Sharpe Ratio (DSR) test statistic."
+    }
+  ],
+  "uncertain": [
+    "key_findings"
+  ]
+}

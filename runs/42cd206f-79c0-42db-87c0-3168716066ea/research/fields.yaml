@@ -1,0 +1,127 @@
+# OSA research field schema -- every item result must cover these fields.
+common:
+  - name: "summary"
+    description: "2-5 sentences answering the item's question for THIS build."
+    type: "string"
+    required: true
+  - name: "key_findings"
+    description: "Concrete, verifiable findings (versions, signatures, limits, dates)."
+    type: "string[]"
+    required: true
+  - name: "recommendations"
+    description: "What the build should do, and what it should avoid."
+    type: "string[]"
+    required: true
+  - name: "as_of"
+    description: "The date or version the information is current as of."
+    type: "string"
+    required: true
+  - name: "sources"
+    description: "Every source relied on: title, url, type (official-docs|paper|repo|article|forum|other), and a short supporting quote."
+    type: "sources"
+    required: true
+byItem:
+  docs-coinbase-advanced-trade-exchange-public-market-dat:
+    - name: "current_version"
+      description: "The current stable version of the library/framework/API."
+      type: "string"
+      required: true
+    - name: "api_surface"
+      description: "The commands/functions/endpoints/config this build will actually use."
+      type: "string[]"
+      required: true
+    - name: "pitfalls"
+      description: "Breaking changes, deprecations and known gotchas in the research time range."
+      type: "string[]"
+      required: true
+  docs-kraken-public-rest-market-data-api:
+    - name: "current_version"
+      description: "The current stable version of the library/framework/API."
+      type: "string"
+      required: true
+    - name: "api_surface"
+      description: "The commands/functions/endpoints/config this build will actually use."
+      type: "string[]"
+      required: true
+    - name: "pitfalls"
+      description: "Breaking changes, deprecations and known gotchas in the research time range."
+      type: "string[]"
+      required: true
+  docs-duckdb:
+    - name: "current_version"
+      description: "The current stable version of the library/framework/API."
+      type: "string"
+      required: true
+    - name: "api_surface"
+      description: "The commands/functions/endpoints/config this build will actually use."
+      type: "string[]"
+      required: true
+    - name: "pitfalls"
+      description: "Breaking changes, deprecations and known gotchas in the research time range."
+      type: "string[]"
+      required: true
+  docs-timesfm:
+    - name: "current_version"
+      description: "The current stable version of the library/framework/API."
+      type: "string"
+      required: true
+    - name: "api_surface"
+      description: "The commands/functions/endpoints/config this build will actually use."
+      type: "string[]"
+      required: true
+    - name: "pitfalls"
+      description: "Breaking changes, deprecations and known gotchas in the research time range."
+      type: "string[]"
+      required: true
+  docs-inkling-2-small-thinking-machines:
+    - name: "current_version"
+      description: "The current stable version of the library/framework/API."
+      type: "string"
+      required: true
+    - name: "api_surface"
+      description: "The commands/functions/endpoints/config this build will actually use."
+      type: "string[]"
+      required: true
+    - name: "pitfalls"
+      description: "Breaking changes, deprecations and known gotchas in the research time range."
+      type: "string[]"
+      required: true
+  docs-gods-eye-view:
+    - name: "current_version"
+      description: "The current stable version of the library/framework/API."
+      type: "string"
+      required: true
+    - name: "api_surface"
+      description: "The commands/functions/endpoints/config this build will actually use."
+      type: "string[]"
+      required: true
+    - name: "pitfalls"
+      description: "Breaking changes, deprecations and known gotchas in the research time range."
+      type: "string[]"
+      required: true
+  docs-agent-reach:
+    - name: "current_version"
+      description: "The current stable version of the library/framework/API."
+      type: "string"
+      required: true
+    - name: "api_surface"
+      description: "The commands/functions/endpoints/config this build will actually use."
+      type: "string[]"
+      required: true
+    - name: "pitfalls"
+      description: "Breaking changes, deprecations and known gotchas in the research time range."
+      type: "string[]"
+      required: true
+  docs-mirofish:
+    - name: "current_version"
+      description: "The current stable version of the library/framework/API."
+      type: "string"
+      required: true
+    - name: "api_surface"
+      description: "The commands/functions/endpoints/config this build will actually use."
+      type: "string[]"
+      required: true
+    - name: "pitfalls"
+      description: "Breaking changes, deprecations and known gotchas in the research time range."
+      type: "string[]"
+      required: true

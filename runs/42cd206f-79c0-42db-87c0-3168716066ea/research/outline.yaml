@@ -1,0 +1,127 @@
+# OSA research outline -- generated from the locked baby PRD. Do not hand-edit mid-run.
+topic: "Pivoting an equity Shariah-research/backtest sandbox to a crypto-first, spot-only halal research and backtesting rig with a future-proof signal-adapter seam"
+items:
+  - slug: "docs-coinbase-advanced-trade-exchange-public-market-dat"
+    title: "Official documentation: Coinbase (Advanced Trade / Exchange public market data API)"
+    question: "Find the OFFICIAL documentation for \"Coinbase (Advanced Trade / Exchange public market data API)\": its current stable version, how it is installed or enabled, the API surface this build will use, and any breaking changes or pitfalls in the last 3 years (prioritise 2024 [OSA: truncated, the planner wrote 101 characters]."
+    kind: "docs"
+    modules:
+      - "general-web"
+  - slug: "docs-kraken-public-rest-market-data-api"
+    title: "Official documentation: Kraken (public REST market data API)"
+    question: "Find the OFFICIAL documentation for \"Kraken (public REST market data API)\": its current stable version, how it is installed or enabled, the API surface this build will use, and any breaking changes or pitfalls in the last 3 years (prioritise 2024 [OSA: truncated, the planner wrote 101 characters]."
+    kind: "docs"
+    modules:
+      - "general-web"
+  - slug: "docs-duckdb"
+    title: "Official documentation: DuckDB"
+    question: "Find the OFFICIAL documentation for \"DuckDB\": its current stable version, how it is installed or enabled, the API surface this build will use, and any breaking changes or pitfalls in the last 3 years (prioritise 2024 [OSA: truncated, the planner wrote 101 characters]."
+    kind: "docs"
+    modules:
+      - "general-web"
+  - slug: "docs-timesfm"
+    title: "Official documentation: TimesFM"
+    question: "Find the OFFICIAL documentation for \"TimesFM\": its current stable version, how it is installed or enabled, the API surface this build will use, and any breaking changes or pitfalls in the last 3 years (prioritise 2024 [OSA: truncated, the planner wrote 101 characters]."
+    kind: "docs"
+    modules:
+      - "general-web"
+  - slug: "docs-inkling-2-small-thinking-machines"
+    title: "Official documentation: Inkling 2 Small (Thinking Machines)"
+    question: "Find the OFFICIAL documentation for \"Inkling 2 Small (Thinking Machines)\": its current stable version, how it is installed or enabled, the API surface this build will use, and any breaking changes or pitfalls in the last 3 years (prioritise 2024 [OSA: truncated, the planner wrote 101 characters]."
+    kind: "docs"
+    modules:
+      - "general-web"
+  - slug: "docs-gods-eye-view"
+    title: "Official documentation: gods-eye-view"
+    question: "Find the OFFICIAL documentation for \"gods-eye-view\": its current stable version, how it is installed or enabled, the API surface this build will use, and any breaking changes or pitfalls in the last 3 years (prioritise 2024 [OSA: truncated, the planner wrote 101 characters]."
+    kind: "docs"
+    modules:
+      - "general-web"
+  - slug: "docs-agent-reach"
+    title: "Official documentation: Agent-Reach"
+    question: "Find the OFFICIAL documentation for \"Agent-Reach\": its current stable version, how it is installed or enabled, the API surface this build will use, and any breaking changes or pitfalls in the last 3 years (prioritise 2024 [OSA: truncated, the planner wrote 101 characters]."
+    kind: "docs"
+    modules:
+      - "general-web"
+  - slug: "docs-mirofish"
+    title: "Official documentation: MiroFish"
+    question: "Find the OFFICIAL documentation for \"MiroFish\": its current stable version, how it is installed or enabled, the API surface this build will use, and any breaking changes or pitfalls in the last 3 years (prioritise 2024 [OSA: truncated, the planner wrote 101 characters]."
+    kind: "docs"
+    modules:
+      - "general-web"
+  - slug: "coinbase-public-candles"
+    title: "Coinbase public OHLCV candle retrieval"
+    question: "Which free, keyless Coinbase endpoint returns daily OHLCV candles for these tokens, what are its granularity options, rate limits, pagination and maximum available history?"
+    kind: "research"
+    modules:
+      - "general-web"
+      - "stackoverflow"
+  - slug: "kraken-public-candles"
+    title: "Kraken public OHLCV fallback"
+    question: "Which free, keyless Kraken endpoint returns daily OHLCV, how do its pair symbols map to the 14 tokens, and how far back does free history go for tokens Coinbase lacks?"
+    kind: "research"
+    modules:
+      - "general-web"
+      - "stackoverflow"
+  - slug: "duckdb-granularity-agnostic-store"
+    title: "Granularity-agnostic candle storage in DuckDB"
+    question: "How to schema and ingest OHLCV in DuckDB so the same path serves daily now and intraday/order-book later without migration?"
+    kind: "research"
+    modules:
+      - "general-web"
+      - "github-debug"
+  - slug: "equal-weight-rebalance-backtest"
+    title: "Equal-weight buy-and-hold with periodic rebalance and realistic costs"
+    question: "Standard conventions for periodic-rebalance equal-weight long-only backtests and correct application of per-side taker fees plus slippage over a 24/7 market clock?"
+    kind: "research"
+    modules:
+      - "general-web"
+      - "stackoverflow"
+  - slug: "signal-adapter-contract-design"
+    title: "Pluggable forecasting-signal interface with provenance, calibration and abstention"
+    question: "How to design a plugin/adapter contract that mandates licence/provenance metadata, calibrated probabilistic output, abstention, and a pass/fail validation gate before a signal can drive allocations?"
+    kind: "research"
+    modules:
+      - "general-web"
+      - "github-debug"
+  - slug: "forecast-validation-gate"
+    title: "Out-of-sample calibration, per-subgroup error and baseline-beating validation"
+    question: "What calibration metrics, proper scoring rules, regime/subgroup breakdowns and out-of-sample comparisons are required to show a signal beats a naive/TimesFM baseline rather than just fitting aggregate data?"
+    kind: "research"
+    modules:
+      - "academic-papers"
+      - "general-web"
+  - slug: "timesfm-baseline"
+    title: "TimesFM as zero-shot numeric baseline"
+    question: "What interface, input format and forecast outputs does TimesFM provide so it can be specified (not implemented) as the baseline every signal must beat?"
+    kind: "research"
+    modules:
+      - "general-web"
+      - "github-debug"
+      - "academic-papers"
+  - slug: "no-najsh-order-intent-model"
+    title: "Enforcing no-najsh at the order/intent model level"
+    question: "How to model an order/intent type whose construction mandates genuine intent-to-fill so spoofing/layering is structurally impossible for the current and future HFT layers to introduce?"
+    kind: "research"
+    modules:
+      - "general-web"
+execution:
+  timeRange: "last 3 years (prioritise 2024 [OSA: truncated, the planner wrote 101 characters]"
+  batchSize: 4
+  resume: true
+  docsRequired: true
+  academic:
+    enabled: true
+    queries:
+      - "Kutzner 2026 calibration forecasting evaluation"
+      - "Chidichimo 2026 out-of-sample forecast validation subgroup error"
+      - "Krastev 2025 prompt-framing fragility LLM forecasting"
+      - "proper scoring rules calibrated probabilistic forecasting abstention"
+      - "financial time-series forecast evaluation beating naive baseline regime"
+  githubLookup:
+    enabled: true
+    queries:
+      - "crypto OHLCV backtest equal-weight buy-and-hold python duckdb"
+      - "halal shariah crypto screening token business activity"
+      - "pluggable signal adapter backtest interface calibration abstention"
+      - "spot-only no-leverage order intent model anti-spoofing"

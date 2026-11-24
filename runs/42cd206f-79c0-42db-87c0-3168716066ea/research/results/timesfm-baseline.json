@@ -1,0 +1,48 @@
+{
+  "summary": "TimesFM is a pretrained decoder-only time-series foundation model (Google Research, Apache-2.0 for v1.0/2.0/2.5, non-commercial license for self-hosted 3.0 weights) that forecasts zero-shot with no fine-tuning: you pass a context array of past values (1D per series, or 2D for multivariate) plus a horizon length, and it returns a point forecast via predict()/predict_batch(), with an optional return_quantiles=True flag that adds 9 decile quantiles (0.1-0.9). Earlier versions (1.0/2.0) required a categorical frequency indicator (0=high/daily, 1=medium, 2=low); 2.5 removed this requirement. Google's own 2.0 model card explicitly states the quantile heads are experimental and 'have not been calibrated after pretraining,' which matters directly for this build's validation-gate calibration requirement. An independent 2026 benchmark paper found TimesFM-2.5 wins task-level ranks on equity return forecasting but its gains over a plain random-walk baseline are 'small and sparse' and not statistically significant for TimesFM specifically — supporting the PRD's choice to require beating both TimesFM AND a naive baseline, not TimesFM alone.",
+  "key_findings": [
+    "Official repo (github.com/google-research/timesfm) documents the current API as forecaster.predict(context, horizon=int, past_only_covariates=None, past_future_covariates=None, return_quantiles=True, use_symmetric_averaging=False) and predict_batch() for multiple series; context is a 1D NumPy array (univariate) or 2D array shaped (num_variates, context_length) for multivariate.",
+    "Output: point forecast exposed as shape (horizon,) [or (num_variates, horizon)]; when return_quantiles=True, an additional array of shape (horizon, 9) [or (num_variates, horizon, 9)] gives the 10th-90th percentile deciles.",
+    "TimesFM 2.0 (500M params, Apache-2.0, huggingface.co/google/timesfm-2.0-500m-pytorch): decoder-only, 50 layers, 1280-dim, input patch length 32, output patch length 128; trained context up to 2,048 timepoints, horizon recommended ≤ context length; requires a frequency indicator in {0,1,2} (0 = up to daily).",
+    "Google's own TimesFM-2.0 model card states explicitly: 'we experimentally offer 10 quantile heads but they have not been calibrated after pretraining' -- i.e. out-of-the-box quantile/uncertainty outputs are not a trustworthy calibrated-probability source as-is.",
+    "TimesFM-2.5 (released September 2025 per official Google Research blog, 200M params, Apache-2.0): extends context to 16,384 timepoints and removes the explicit frequency-indicator argument from the API.",
+    "TimesFM-3 (official Google Research blog, dated 2026-08-31): adds native multivariate + past/future covariate support, still predicts point forecasts plus 9 quantiles (10th-90th percentile); self-hosted weights ship under a non-commercial, non-production license (commercial use only via Google Cloud BigQuery ML / Vertex Model Garden), unlike the Apache-2.0 1.0/2.0/2.5 releases.",
+    "It is explicitly a zero-shot generalist model -- no task-specific fine-tuning is required or expected to use it as a forecasting baseline.",
+    "Independent benchmark paper (arXiv:2606.27100, dated 2026-06-25, evaluating TimesFM-2.5 and other TSFMs on linear/log returns of 5 US equities): TimesFM-2.5 had the strongest average task-level ranks among tested TSFMs, but a formal statistical test rejecting 'no better than random walk' succeeded only for Chronos (AMZN) and Moirai-2.0 (GOOG) -- not for TimesFM -- concluding pretrained TSFMs are 'useful practical priors' but 'not universal engines for statistically reliable alpha generation.'"
+  ],
+  "recommendations": [
+    "Spec the validation-gate contract to require each adapter to beat BOTH a naive/random-walk (last-value or no-change) baseline AND zero-shot TimesFM forecasts on held-out data -- per-token, per-regime -- since the benchmark literature shows TimesFM alone frequently fails to beat random walk on financial series; requiring only 'beat TimesFM' would let a signal pass by tying a weak baseline.",
+    "Do not spec TimesFM's own quantile heads as the source of 'calibrated probability/uncertainty' for the validation gate -- Google's model card states those quantiles are uncalibrated. The validation-gate spec should require calibration to be measured independently (e.g. reliability diagrams / Brier score against realised price) rather than trusting TimesFM's internal uncertainty output.",
+    "Pin a specific TimesFM checkpoint and version in the spec document (point to the interface, don't implement) -- note that 1.0/2.0/2.5 are Apache-2.0 (safe for research reuse) while self-hosted 3.0 weights carry a non-commercial/non-production license, which matters if this baseline spec is ever operationalised.",
+    "Document the input-format contract explicitly in the spec: context = array of past daily close prices or log-returns per token, horizon = rebalance-period length in days, consistent with the build's daily-granularity ingestion; note that 2.0/1.0 needs an explicit frequency indicator (use 0 for daily) while 2.5+ drops that parameter -- the spec should state which API shape is assumed so a future implementer isn't surprised.",
+    "Because this item is spec-only per the PRD (no implementation), capture the predict()/predict_batch() signature, context/horizon input shapes, and point+quantile output shapes as the documented contract the adapter validation gate benchmarks against -- no code should be written now."
+  ],
+  "as_of": "TimesFM-2.0 model card and GitHub README as observed 2026-11-24; TimesFM-2.5 officially released September 2025 per Google Research blog; TimesFM-3 blog post dated 2026-08-31; benchmark paper arXiv:2606.27100 dated 2026-06-25",
+  "sources": [
+    {
+      "title": "google-research/timesfm GitHub repository (README)",
+      "url": "https://github.com/google-research/timesfm",
+      "type": "repo",
+      "quote": "forecaster.predict(context, horizon=X, return_quantiles=True) ... License by Version: 1.0, 2.0, 2.5 Apache-2.0 | 3.0 weights timesfm-non-commercial-license-v1.0"
+    },
+    {
+      "title": "google/timesfm-2.0-500m-pytorch · Hugging Face",
+      "url": "https://huggingface.co/google/timesfm-2.0-500m-pytorch",
+      "type": "official-docs",
+      "quote": "It focuses on point forecasts. We experimentally offer 10 quantile heads but they have not been calibrated after pretraining."
+    },
+    {
+      "title": "TimesFM-3: A zero-shot foundation model for multivariate forecasting (Google Research blog)",
+      "url": "https://research.google/blog/timesfm-3-a-zero-shot-foundation-model-for-multivariate-forecasting/",
+      "type": "official-docs",
+      "quote": "The model predicts 9 quantiles (from the 10th to the 90th percentile) for each target time series ... TimesFM-2.5 release: September 2025"
+    },
+    {
+      "title": "Pretrained Time-Series Foundation Models for Financial Return Forecasting (arXiv:2606.27100)",
+      "url": "https://arxiv.org/abs/2606.27100",
+      "type": "paper",
+      "quote": "gains over the random-walk benchmark are small and sparse ... rejects equal or inferior predictive accuracy only for Chronos on AMZN and Moirai-2.0 on GOOG"
+    }
+  ],
+  "uncertain": []
+}

@@ -1,0 +1,73 @@
+{
+  "summary": "Build the signal-adapter contract as a Python `typing.Protocol` (PEP 544, Python 3.8+) rather than an ABC, since OSA only needs a type/interface definition with zero implementations and Protocols let future adapters satisfy the contract structurally without forced inheritance. The contract should require a provenance/licence block modeled on the Hugging Face model-card metadata spec (license, license_link/license_name, datasets/source identifiers), a `predict()` method returning a calibrated probability plus uncertainty (not a raw score), an explicit abstain/no-opinion return path drawn from the selective-prediction literature's coverage/risk framing, and a separate validation-gate spec modeled on champion/challenger promotion gates (DataRobot) and Google's 'ML Test Score' rubric: out-of-sample evaluation, calibration checking (Brier score / reliability diagrams per scikit-learn's calibration module), per-slice (token/regime) error breakdown, and a required beat of a naive baseline and TimesFM as the two reference forecasters. None of this needs an implementation yet — only the interface, metadata schema, and gate criteria, matching the PRD's 'contract, no implementation' requirement.",
+  "key_findings": [
+    "PEP 544 (Python 3.8+) defines `typing.Protocol` for structural subtyping: a class satisfies the protocol by implementing matching method signatures, with no inheritance required; `@runtime_checkable` enables optional `isinstance()` checks but the PEP notes these are 'not 100% reliable statically.'",
+    "Community guidance (Belderbos, RealPython — 2024/2025 articles) converges on: use `Protocol` for the external plugin boundary (so third-party adapter authors aren't forced into your class hierarchy) and an internal ABC only if adapters need shared concrete helper code.",
+    "Hugging Face's model-card YAML metadata spec (current as of its docs, 2026) is the most widely deployed provenance schema: `license`, `license_name`/`license_link` for custom licences, `datasets` (source identifiers), `base_model`, and a `model-index` block for structured eval results with a `source.url` field — a usable template for an adapter's provenance/licence metadata.",
+    "Selective prediction / abstention literature frames abstention as a risk-coverage tradeoff: a model predicts only when a confidence threshold is met, otherwise abstains; Area Under the Risk-Coverage Curve (AURC) is the standard single-number metric, and recent work explicitly warns that accepted (non-abstained) predictions must still be separately checked for calibration — abstention and calibration are not the same property and both must be specified.",
+    "scikit-learn's `calibration` module (stable docs) provides the standard calibration vocabulary the validation gate should reuse: reliability diagrams/calibration curves (predicted probability vs. observed frequency, binned) and `brier_score_loss`, with the explicit caveat that 'a lower Brier score does not always mean a better calibrated model' because it conflates calibration loss and refinement loss — the gate spec should require a calibration curve, not Brier score alone.",
+    "Google's TimesFM paper (arXiv:2310.10688v2, dated 2024-01-31) benchmarks against a naive baseline defined as 'constantly predicts the last value in the context,' using mean-scaled MAE (scaled by the naive baseline's own MAE) averaged across datasets, and reports TimesFM beating naive and being statistically comparable to supervised baselines like PatchTST in zero-shot evaluation — this is the concrete naive-baseline definition and metric the PRD's 'beat TimesFM/naive baseline' gate should cite.",
+    "Google's 'ML Test Score' paper (Breck et al., research.google.com, pub45742) defines a 28-item production-readiness rubric across 4 sections including 'test against a simpler model as a baseline,' 'test model quality on important data slices,' and 'test model quality before serving' — directly supporting a per-regime/per-token slice requirement and a pre-serving validation gate as standard MLOps practice, not an OSA-specific invention.",
+    "DataRobot's Challengers feature (docs.datarobot.com, v11.0 docs) requires the comparison dataset to be explicitly out-of-sample for both the champion and challenger models before a 'Promote to champion' action is enabled, and generates accuracy metrics, dual-lift charts, and ROC curves as the comparison artifacts — a concrete precedent for a pass/fail gate UI/workflow, though DataRobot itself leaves the actual threshold decision to the user rather than enforcing an automatic pass/fail."
+  ],
+  "recommendations": [
+    "Define the adapter contract as a `typing.Protocol` (not an ABC) with a frozen/dataclass metadata object required at construction time: `source: str`, `licence: str`, `licence_url: str | None`, `data_provenance: str` — mirroring the Hugging Face `license`/`license_name`/`license_link`/`datasets` fields — so provenance is declared, not optional.",
+    "Make the core prediction method return a typed result carrying both a calibrated probability (or probability distribution/quantiles) AND an explicit abstain flag/sentinel, e.g. `Signal = probability: float, uncertainty: float, abstained: bool` — do not conflate 'low confidence' with 'no output'; the abstain path must be a distinct, non-numeric return per the selective-prediction literature.",
+    "Specify the validation gate as its own dataclass/spec (not code) requiring: (1) out-of-sample evaluation window disjoint from any fitting data, (2) a calibration check via reliability-diagram-style binned comparison (not Brier score alone, since Brier conflates calibration and refinement per sklearn's own docs), (3) per-token and per-regime error breakdown as separate rows, not an aggregate, and (4) a required beat of both a naive last-value baseline and TimesFM using the same scaled-MAE style metric TimesFM's own paper uses, so the comparison is apples-to-apples with published numbers.",
+    "Treat the validation gate as pass/fail against pre-declared thresholds (unlike DataRobot's user-driven promotion), since the PRD requires a gate that blocks allocation-driving use automatically, not a human-reviewed dashboard.",
+    "Do not implement any adapter, scoring code, or TimesFM integration now — acceptance criteria 11-12 only require the interface/dataclass definitions and the written gate spec; building real adapters would violate the 'no HFT/live/adapter code' constraint and the two-speed roadmap boundary.",
+    "Keep the contract in the 'fast layer' documentation seam only — the PRD explicitly forbids building live/adapter code in this phase, so the Protocol definition and gate spec should live as typed stubs/interfaces plus a markdown spec, with no concrete forecaster wired to the backtest or allocation logic."
+  ],
+  "as_of": "2026-11 (TimesFM paper dated 2024-01-31; PEP 544 landed Python 3.8; Hugging Face model-card docs and scikit-learn calibration docs reflect their current/stable pages as fetched; DataRobot docs version 11.0)",
+  "sources": [
+    {
+      "title": "PEP 544 – Protocols: Structural subtyping (static duck typing)",
+      "url": "https://peps.python.org/pep-0544/",
+      "type": "official-docs",
+      "quote": "instance checks are not 100% reliable statically, this is why this behavior is opt-in"
+    },
+    {
+      "title": "Model Cards · Hugging Face",
+      "url": "https://huggingface.co/docs/hub/model-cards",
+      "type": "official-docs",
+      "quote": "You can specify the license in the model card metadata section... If required, you can also specify a custom license by adding `other` as the license value and specifying the name and a link to the license"
+    },
+    {
+      "title": "Selective Prediction: Coverage, Risk, and Abstention",
+      "url": "https://insightful-data-lab.com/2025/03/28/selective-prediction/",
+      "type": "article",
+      "quote": "Risk-coverage curves (RCC) plot the compromise between coverage and error rate against changes in the confidence threshold, with Area Under the Risk-Coverage Curve (AURC) emerging as a single measure for comparing models."
+    },
+    {
+      "title": "A decoder-only foundation model for time-series forecasting (TimesFM)",
+      "url": "https://arxiv.org/html/2310.10688v2",
+      "type": "paper",
+      "quote": "just constantly predicts the last value in the context for each time-series... mean scaled MAE's are averaged across all datasets"
+    },
+    {
+      "title": "1.16. Probability calibration — scikit-learn documentation",
+      "url": "https://scikit-learn.org/stable/auto_examples/calibration/plot_calibration_curve.html",
+      "type": "official-docs",
+      "quote": "a lower Brier score does not always mean a better calibrated model... the Brier score metric is a combination of calibration loss and refinement loss"
+    },
+    {
+      "title": "The ML Test Score: A Rubric for ML Production Readiness and Technical Debt Reduction",
+      "url": "https://research.google.com/pubs/archive/aad9f93b86b7addfea4c419b9100c6cdd26cacea.pdf",
+      "type": "paper",
+      "quote": "a set of 28 actionable tests... test against a simpler model as a baseline, and testing model quality on important data slices"
+    },
+    {
+      "title": "Challengers tab — DataRobot docs (v11.0)",
+      "url": "https://docs.datarobot.com/11.0/en/docs/mlops/monitor/challengers.html",
+      "type": "official-docs",
+      "quote": "select a dataset for generating insights on both models... recommends using holdout or validation partitions, or uploading a fresh dataset"
+    },
+    {
+      "title": "Protocol or ABC? Designing a pluggable provider interface — Bob Belderbos",
+      "url": "https://belderbos.dev/blog/protocol-vs-abc-provider-interface/",
+      "type": "article",
+      "quote": "A Protocol defines the contract, an ABC on the other hand, is just an implementation detail my providers happen to reuse."
+    }
+  ],
+  "uncertain": []
+}

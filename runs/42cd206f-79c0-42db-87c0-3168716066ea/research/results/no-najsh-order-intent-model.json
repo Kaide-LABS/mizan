@@ -1,0 +1,60 @@
+{
+  "summary": "The structural fix is to never give the order/intent type a state that can exist without a paired fill: model it as an immutable, frozen value object whose constructor (a private/sealed factory, not a public __init__) requires both the trade parameters AND a resolved Fill (or an explicit, logged Rejection) in the same atomic call, so there is no intermediate 'resting, cancelable, unfilled' state for a current backtest-only build to misuse and no legal way for a future HFT layer to bypass. This follows the well-established 'make illegal states unrepresentable' / typestate / smart-constructor pattern (encode state in the type, use private constructors + validating factories) and matches how backtest-only engines (QuantConnect) sidestep spoofing entirely by assuming orders fill completely with no cancelable resting state, while explicit order-lifecycle engines (nautilus_trader) keep intent, acknowledgment, fill and cancellation as separate typed stages precisely so 'genuine intent to trade' can be audited. Legally, the CFTC's own test for spoofing turns on provable intent-to-cancel-before-execution versus a 'legitimate, good-faith attempt to consummate a trade' -- so the test suite should assert that the type cannot be instantiated unless it carries proof of a consummated (or explicitly rejected) trade, never a bare, cancelable posting.",
+  "key_findings": [
+    "The 'make illegal states unrepresentable' pattern (F# for Fun and Profit, fsharpforfunandprofit.com) uses discriminated unions / smart constructors so an invalid combination (e.g., an order with no fill and no rejection) simply has no corresponding type value -- the compiler/validator rejects construction rather than relying on a later runtime check.",
+    "The typestate pattern (multiple Rust sources, e.g. microsoft/RustTraining) encodes lifecycle state in the type itself (Order<Created>, Order<Filled>) using private fields/constructors, so callers cannot forge an intermediate state; methods consume self and return a new type on transition, making an 'order that exists but was never intended to fill' unconstructable.",
+    "CFTC Final Rule on spoofing (17 CFR Part 180, Federal Register 2013-12365, dated May 28, 2013) defines spoofing under CEA section 4c(a)(5)(C) as 'bidding or offering with the intent to cancel the bid or offer before execution,' requires intent/scienter beyond recklessness, and explicitly exempts orders that are 'part of a legitimate, good-faith attempt to consummate a trade' -- i.e., the legal line is drawn at provable intent-to-fill, matching the required test-level invariant.",
+    "QuantConnect's v2 docs (quantconnect.com, page last modified 2026-11-24) state that in backtests 'pre-built fill models assume orders completely fill' by default -- i.e., the reference backtest-only platform's default architecture has no cancelable-before-fill resting-order concept at all, which structurally removes the precondition for spoofing in a backtest/research context.",
+    "nautilus_trader (GitHub issue #2194, opened 2025-01-08, closed 2025-10-30) keeps order lifecycle stages explicit and separate (OrderIntent/acknowledgment/fill/partial-fill/cancel) via a FillModel hook, showing that even order-book-aware engines treat 'intent' as a first-class, auditable stage distinct from cancellation -- useful as the pattern for a later, more realistic fast/HFT layer, but not needed for the current equal-weight baseline.",
+    "Python's standard mechanisms for this (docs.python.org dataclasses + pydantic docs) are frozen dataclasses (immutable after construction, __setattr__ rejects mutation) combined with __post_init__ validation or a Pydantic validator, plus a private constructor exposed only through a validating factory function/classmethod -- the practical way to implement a 'smart constructor' in this codebase's likely Python stack.",
+    "No source found an existing open-source library that ships an 'OrderIntent' type specifically engineered to make spoofing structurally impossible; marketmaker.cc's fill-simulation article (2026-07-16) models order lifecycle states but does not validate intent at construction, confirming this is a design choice the build must make itself rather than an off-the-shelf component."
+  ],
+  "recommendations": [
+    "Model the V1 (buy-and-hold/rebalance) order/intent type as a single frozen, immutable value object with NO public bare constructor: only a factory function (e.g. `Fill.resolve(intent, ...)`) that requires the trade parameters AND either a concrete Fill result or an explicit, logged Rejection to exist simultaneously -- never allow an `Intent` or `Order` instance to exist on its own with an unresolved/cancelable status, since this backtest has no live order book and does not need one.",
+    "Expose no `cancel()` method on the type in V1 at all; since every rebalance trade is assumed to execute at the next bar's price (matching the no-fake-order constraint), there is no legitimate reason for a cancelable, restable order to exist, which eliminates the precondition for spoofing/layering by construction rather than by policy.",
+    "Write the required invariant test to literally attempt construction of the order/intent type with a missing or null fill/rejection field and assert it raises (TypeError/ValidationError) -- this directly satisfies acceptance criterion 10 ('rejects an order created without intent to fill').",
+    "For the future fast/HFT-layer seam, define (spec only, no implementation) that any resting/cancelable order type MUST be a structurally distinct, sealed type family requiring a mandatory, non-optional 'intent attestation' field at construction (e.g., a reserved-notional/capital-commitment proof), echoing the CFTC's legal distinction between a 'legitimate good-faith attempt to consummate a trade' and a cancel-intent posting -- this keeps the contract honest for later phases without building any live-trading code now.",
+    "Implement via Python frozen dataclass + `__post_init__` validation (or a Pydantic model with a validator) with a private/underscore-prefixed constructor and a public validating factory classmethod, since that is the idiomatic, low-dependency way to get smart-constructor/typestate guarantees in a Python research codebase without adopting Rust-style generics.",
+    "Do not attempt runtime spoofing *detection* (statistical/order-book heuristics); that is the wrong layer for this build -- the PRD requires structural impossibility at the type level, not surveillance, and detection-style approaches (TCN models, order-to-trade ratios) are out of scope for a backtest-only, no-order-book system."
+  ],
+  "as_of": "2026-11-24",
+  "sources": [
+    {
+      "title": "Designing with types: Making illegal states unrepresentable",
+      "url": "https://fsharpforfunandprofit.com/posts/designing-with-types-making-illegal-states-unrepresentable/",
+      "type": "article",
+      "quote": "use a union type with a case for each possibility"
+    },
+    {
+      "title": "2013-12365 (CFTC Final Interpretive Guidance and Policy Statement on Disruptive Practices)",
+      "url": "https://www.cftc.gov/LawRegulation/FederalRegister/FinalRules/2013-12365.html",
+      "type": "official-docs",
+      "quote": "a legitimate, good-faith cancellation or modification of orders...would not violate section CEA 4c(a)(5)(C)"
+    },
+    {
+      "title": "Key Concepts - Trade Fills - QuantConnect Documentation",
+      "url": "https://www.quantconnect.com/docs/v2/writing-algorithms/reality-modeling/trade-fills/key-concepts",
+      "type": "official-docs",
+      "quote": "in backtests, the pre-built fill models assume orders completely fill"
+    },
+    {
+      "title": "Enhanced order-fill simulation in backtesting · Issue #2194 · nautechsystems/nautilus_trader",
+      "url": "https://github.com/nautechsystems/nautilus_trader/issues/2194",
+      "type": "repo",
+      "quote": "Keep the current FillModel responsibility of determining if/how much of an order is filled"
+    },
+    {
+      "title": "Fill simulation: the ladder from close-price fantasy to queue-aware reality",
+      "url": "https://www.marketmaker.cc/en/blog/post/fill-simulation-partial-fills-backtest/",
+      "type": "article",
+      "quote": "any price amend resets q_ahead to the full current level volume"
+    },
+    {
+      "title": "3. The Newtype and Type-State Patterns - Rust Patterns & Engineering How-Tos",
+      "url": "https://microsoft.github.io/RustTraining/rust-patterns-book/ch03-the-newtype-and-type-state-patterns.html",
+      "type": "official-docs",
+      "quote": "Typestate makes invalid operations impossible to call using private fields to prevent callers from forging invalid states"
+    }
+  ],
+  "uncertain": []
+}

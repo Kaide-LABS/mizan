@@ -1,0 +1,76 @@
+{
+  "summary": "Coinbase offers two overlapping, keyless, public (no-auth) REST endpoints for historical daily OHLCV candles: the legacy-rebranded 'Exchange API' at api.exchange.coinbase.com (successor to the shut-down Coinbase Pro API, itself not deprecated) and the newer 'Advanced Trade' public market data endpoint under api.coinbase.com/api/v3/brokerage. Both require no API key for market-data reads, but have different parameter shapes, different per-call candle caps (300 vs 350), and both are capped per request, so multi-year daily history for 14 coins requires simple pagination. For a keyless, zero-setup, spot-only daily OHLCV ingester, the Exchange API endpoint is the simpler of the two (optional start/end, granularity as integer seconds) and has no CDP account/project requirement, making it the natural primary source with Kraken as fallback for symbols/history it lacks.",
+  "key_findings": [
+    "Exchange API public candles: GET https://api.exchange.coinbase.com/products/{product_id}/candles, no auth ('security: []' in the OpenAPI spec), granularity must be one of 60/300/900/3600/21600/86400 seconds; max 300 data points per request, request is rejected if start/end+granularity would exceed that.",
+    "Exchange API candle response is an array ordered [time, low, high, open, close, volume] (note: open/close order differs from the Advanced Trade object fields).",
+    "Advanced Trade public candles: GET https://api.coinbase.com/api/v3/brokerage/market/products/{product_id}/candles, no auth required, but start, end AND granularity are required params; granularity is a string enum (ONE_MINUTE...ONE_DAY); optional 'limit', default and max 350 candles per call; public responses are cached for 1 second.",
+    "Coinbase Pro (api.pro.coinbase.com) was fully shut down/migrated by 2023-NOV-09; its successor for unauthenticated market data is the Exchange API (api.exchange.coinbase.com), which the Exchange changelog explicitly does NOT list as deprecated as of this review.",
+    "Public (unauthenticated) Exchange API endpoints are rate-limited to 10 req/s per IP with burst to 15 req/s; private (authenticated) endpoints get higher limits — not relevant to this keyless build but important for pagination throttling.",
+    "2025-FEB-05: Coinbase deprecated legacy *authenticated* API keys (forces migration to CDP/Advanced Trade keys) — this affects authenticated/trading use, not the keyless public candles endpoints this build relies on, but is a pitfall if anyone later adds authenticated order flow.",
+    "2025-JAN-01: Coinbase Price Oracle API deprecated (irrelevant to candles, but shows Coinbase does retire adjacent data APIs without notice to this project).",
+    "2025-OCT-20: Coinbase enforced TLS 1.2+ on the *.exchange.coinbase.com domain for all system access — any HTTP client/library pinned to an older TLS version will fail against the Exchange API candles endpoint.",
+    "Historical Exchange API docs explicitly warn: 'Historical rate data may be incomplete. No data is published for intervals where there are no ticks.' and advise against frequent polling of the candles endpoint — relevant for building a cache-respecting daily ingester.",
+    "Advanced Trade's public market endpoints additionally expose /market/products (list) and /market/products/{id}/ticker, which could serve as a lighter 'is this symbol listed' check before calling candles for each of the 14 named tokens."
+  ],
+  "recommendations": [
+    "Use the Exchange API public candles endpoint (api.exchange.coinbase.com/products/{product_id}/candles, granularity=86400 for daily) as the primary Coinbase data path: it needs no CDP account/project, no key, and has simpler optional start/end semantics than Advanced Trade's required-params version.",
+    "Design the ingestion layer's granularity parameter around the Exchange API's integer-seconds enum (60,300,900,3600,21600,86400) so non-daily granularities (e.g. 3600 for hourly) can be requested later without code changes, per acceptance criterion 3 — just pass a different integer today while defaulting to 86400.",
+    "Paginate daily-candle pulls in chunks of ≤300 days per request (Exchange API hard cap) when backfilling multi-year history for each of the 14 tokens; do not request a date range that silently gets truncated.",
+    "Respect the 10 req/s (burst 15 req/s) public IP rate limit with basic client-side throttling/backoff on HTTP 429 across the 14-token backfill loop.",
+    "[removed by OSA: this line looked like an instruction aimed at an AI (governance)]",
+    "Treat Coinbase Pro references in any third-party library/example code as dead — do not route through api.pro.coinbase.com; use api.exchange.coinbase.com (Exchange API) or api.coinbase.com/api/v3/brokerage/market (Advanced Trade public) instead.",
+    "Do not use any authenticated Advanced Trade endpoints or CDP API keys for this build — the PRD requires keyless/public access only, and authenticated-key flows are the ones currently churning (legacy key deprecation Feb 2025), which keyless public endpoints are insulated from.",
+    "Fall back to Kraken's public OHLC endpoint for any of the 14 tokens not listed on Coinbase or lacking sufficient history, per the locked constraint — verify per-token product availability via the Exchange API's /products or Advanced Trade's /market/products list endpoint before attempting a candles call, to fail over cleanly rather than treating a 404 as a hard error."
+  ],
+  "as_of": "Documentation reviewed 2026-11-24; most recent cited changelog entries are 2025-OCT-20 (TLS enforcement) and 2025-FEB-05 (legacy key deprecation). No explicit 'current version' number is published by Coinbase for either API; Advanced Trade's REST base path is versioned 'v3' (api/v3/brokerage), Exchange API is unversioned in its URL.",
+  "sources": [
+    {
+      "title": "Get Public Product Candles - Coinbase Developer Documentation",
+      "url": "https://docs.cdp.coinbase.com/api-reference/advanced-trade-api/rest-api/public/get-public-product-candles",
+      "type": "official-docs",
+      "quote": "Returns 'rates for a single product by product ID, grouped in buckets.' Default response contains 350 candles maximum; granularity enum ONE_MINUTE...ONE_DAY; start and end are required."
+    },
+    {
+      "title": "Get product candles - Coinbase Developer Documentation (Exchange API)",
+      "url": "https://docs.cdp.coinbase.com/api-reference/exchange-api/rest-api/products/get-product-candles",
+      "type": "official-docs",
+      "quote": "granularity must be one of: 60, 300, 900, 3600, 21600, 86400 seconds... Max Candles per Request: 300... Historical rate data may be incomplete."
+    },
+    {
+      "title": "Exchange Changelog - Coinbase Developer Documentation",
+      "url": "https://docs.cdp.coinbase.com/exchange/changes/changelog",
+      "type": "official-docs",
+      "quote": "Pro API (2024-SEP-11): deprecated in favor of Exchange API ... no entries mentioning deprecation, sunset, retirement, or shutdown of the Exchange API itself."
+    },
+    {
+      "title": "Exchange Rate Limits Overview / REST Rate Limits - Coinbase Developer Documentation",
+      "url": "https://docs.cdp.coinbase.com/exchange/rest-api/rate-limits",
+      "type": "official-docs",
+      "quote": "Requests Per Second: 10 per IP. Burst Capacity: Up to 15 requests per second per IP. Public endpoints do not require authentication."
+    },
+    {
+      "title": "Advanced Trade REST Endpoints - Coinbase Developer Documentation",
+      "url": "https://docs.cdp.coinbase.com/coinbase-app/advanced-trade-apis/rest-api",
+      "type": "official-docs",
+      "quote": "Base URL: https://api.coinbase.com/api/v3/brokerage ... Public (No Auth Required): /time, /market/products, /market/products/{product_id}/candles, /market/products/{product_id}/ticker."
+    }
+  ],
+  "current_version": "No formal version numbering published; Advanced Trade public market data REST is on base path /api/v3/brokerage (v3); Exchange API (api.exchange.coinbase.com) is unversioned in its URL and remains the active, non-deprecated successor to the shut-down Coinbase Pro API [uncertain]",
+  "api_surface": [
+    "GET https://api.exchange.coinbase.com/products/{product_id}/candles?granularity=86400&start=...&end=... (primary daily OHLCV pull, keyless, max 300 rows/call)",
+    "GET https://api.exchange.coinbase.com/products (optional: verify product/symbol availability before requesting candles)",
+    "GET https://api.coinbase.com/api/v3/brokerage/market/products/{product_id}/candles?granularity=ONE_DAY&start=...&end=... (alternative/backup keyless daily OHLCV source, max 350 rows/call)",
+    "GET https://api.coinbase.com/api/v3/brokerage/market/products (alternative product listing check)"
+  ],
+  "pitfalls": [
+    "Coinbase Pro (api.pro.coinbase.com) is fully retired since 2023-11-09; any code/snippet referencing it will fail — must use Exchange API or Advanced Trade public paths instead.",
+    "2025-02-05: legacy authenticated API keys deprecated — irrelevant to this keyless build today, but a trap if authenticated/live-order code is ever added later without updating to CDP keys.",
+    "2025-10-20: TLS 1.2+ enforced on *.exchange.coinbase.com — clients/libraries with outdated TLS stacks will see connection failures that look like the endpoint is down.",
+    "Exchange API candles hard-caps at 300 rows and Advanced Trade at 350 rows per call — both silently reject (Exchange) or truncate oversized start/end+granularity ranges, requiring explicit pagination logic for multi-year daily backfills across 14 tokens.",
+    "The two Coinbase candle response shapes differ in field order/naming (Exchange: [time,low,high,open,close,volume] array; Advanced Trade: named object fields start/open/close/high/low/volume) — a single ingestion adapter must not assume one format when switching between them or to Kraken.",
+    "Exchange API docs themselves warn that polling the candles endpoint frequently is discouraged and historical data 'may be incomplete' for low-liquidity intervals — a risk for newer/thinner-volume tokens among the 14 named coins."
+  ],
+  "uncertain": [
+    "current_version"
+  ]
+}

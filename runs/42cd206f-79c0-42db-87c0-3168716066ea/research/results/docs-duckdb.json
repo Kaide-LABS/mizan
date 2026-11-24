@@ -1,0 +1,75 @@
+{
+  "summary": "DuckDB's current stable line is 2.0, released as a Long-Term-Support (LTS) release on 2026-10-21 under codename 'Cinnamon Teal', with the Python package at version 2.0.1 as of the installation docs. For this build it is used purely as an embedded, file-based analytical store: install via `pip install duckdb`, open a persistent file with `duckdb.connect(\"path/to/db.duckdb\")`, and move pandas OHLCV DataFrames in/out with `con.sql(\"CREATE TABLE ... AS SELECT * FROM df\")` / `con.register()` / `.df()`. The prior LTS (1.5.x, supported until 2027-03) is a safer pin if the team wants to avoid 2.0's SQL-parser and lambda-syntax changes, but 2.0 is the officially current stable and has a longer support horizon (through 2027-10).",
+  "key_findings": [
+    "Current stable/LTS release: DuckDB 2.0.0 'Cinnamon Teal', announced 2026-10-21 on the official blog; Python client package is at 2.0.1 per the official installation docs.",
+    "LTS support windows stated in the official announcement: 2.0 supported through October 2027; 1.5 extended to March 2027; 1.4 supported until November 2026.",
+    "Install for Python: `pip install --upgrade duckdb`; pin an older release with e.g. `pip install duckdb==1.5.6`. CLI available separately via `pip install duckdb-cli` (or `duckdb-cli==1.5.6` for the LTS 1.x line).",
+    "Windows requires the Microsoft Visual C++ Redistributable for the Python package to load.",
+    "Database files written by 2.0 cannot be opened by pre-2.0 DuckDB builds; 2.0 can still read/write older pre-2.0 database files (one-way compatibility) — relevant if a cached/shared .duckdb file is later opened with an older runtime.",
+    "Breaking change: integer division by zero (`//` or `%` on integers) now raises an error instead of returning NULL in 2.0; float `/` still returns infinity on divide-by-zero.",
+    "Breaking change: the old single-arrow lambda syntax is disabled in 2.0's new PEG-based SQL parser (replacing the Postgres-derived parser).",
+    "Build requirement bumped to C++17 (from C++11) and release builds now use Clang — not directly relevant to pip-installed Python usage but relevant if building extensions from source.",
+    "Python API change in 2.0: `fetchone()` was removed from relation objects returned by `con.sql(...)` (lazy relations re-execute per call); use `.fetchall()`/`.df()`/`.fetchdf()` on a cursor via `con.execute(...)` instead, or materialize the relation first.",
+    "DuckDB Python natively queries pandas/Polars/PyArrow objects by name in SQL (e.g. `duckdb.sql(\"SELECT * FROM pandas_df\")`) but these external-object scans are read-only — you cannot INSERT/UPDATE directly into a DataFrame; data must be materialized into a real DuckDB table to persist it.",
+    "`duckdb.connect()` with no path gives a session-only in-memory database; `duckdb.connect(\"file.duckdb\")` gives a persistent file-backed database that reloads on reconnect — this is the mode the ingestion store needs.",
+    "CSV ingestion supported via `duckdb.read_csv(\"file.csv\")` or directly querying `'file.csv'` in SQL; relations can be exported with `.write_parquet()` / `.write_csv()` for the raw-cache layer.",
+    "S3 URL query-string credentials/config are disabled by default in 2.0 (treated as literal object key) — not applicable here since this build uses no cloud storage, but worth noting if a future adapter layer touches S3-hosted data."
+  ],
+  "recommendations": [
+    "Pin an explicit DuckDB version in requirements (e.g. `duckdb==2.0.1`) rather than floating `duckdb`, since 2.0 is a new major line with parser/behavior changes versus 1.x.",
+    "Use a single persistent file path, e.g. `duckdb.connect(\"data/mizan.duckdb\")`, as the DuckDB store referenced in acceptance criterion 2; keep the raw cache (Parquet/CSV per candle fetch) as a separate directory, written independently of the DB so re-ingestion is idempotent.",
+    "Write OHLCV data by materializing pandas DataFrames into real tables (`CREATE TABLE IF NOT EXISTS ... AS SELECT * FROM df` or `INSERT INTO ... SELECT * FROM df`) rather than relying on read-only DataFrame scans, since the fetched candles must persist across runs.",
+    "Do not rely on `.fetchone()` on relation objects from `con.sql(...)`; use `con.execute(sql).fetchall()`/`.df()` for cursor-style access if iterative row fetching is needed anywhere in the pipeline.",
+    "Avoid integer division (`//`, `%`) on any fee/slippage or rebalance-weight calculation paths without explicit zero-guards, since 2.0 raises on integer divide-by-zero where 1.x may have returned NULL — this could silently break if ported from older DuckDB-based code.",
+    "If the existing equity-era repo was built against an older DuckDB (1.x) and its database files/queries are reused as-is per the 'preserve equity code as-is' constraint, verify those files still open under 2.0 (one-way compatible) but do not downgrade the new crypto store to be read by pre-2.0 tooling.",
+    "No DuckDB extensions are required for this build's stated feature set (local pandas <-> file-backed table, CSV/Parquet caching); avoid pulling in optional extensions (httpfs, S3, lakehouse formats) since all data fetching happens via the Coinbase/Kraken clients in Python, not via DuckDB's own HTTP/S3 readers."
+  ],
+  "as_of": "2026-11-24; DuckDB 2.0.0 announced 2026-10-21, Python package 2.0.1 per docs.2.0 installation page fetched same day",
+  "sources": [
+    {
+      "title": "DuckDB Documentation (docs/2.0)",
+      "url": "https://duckdb.org/docs/2.0/",
+      "type": "official-docs",
+      "quote": "See what's new in the 2.0 documentation"
+    },
+    {
+      "title": "DuckDB Python Client Overview (docs/2.0)",
+      "url": "https://duckdb.org/docs/2.0/clients/python/overview.html",
+      "type": "official-docs",
+      "quote": "any data written to that connection will be persisted, and can be reloaded by reconnecting to the same file"
+    },
+    {
+      "title": "DuckDB Installation (docs/2.0)",
+      "url": "https://duckdb.org/docs/2.0/installation/",
+      "type": "official-docs",
+      "quote": "pip install --upgrade duckdb ... DuckDB requires the Microsoft Visual C++ Redistributable"
+    },
+    {
+      "title": "Announcing DuckDB 2.0.0 LTS \"Cinnamon Teal\"",
+      "url": "https://duckdb.org/2026/10/21/announcing-duckdb-200",
+      "type": "official-docs",
+      "quote": "DuckDB 2.0 comes with a small set of breaking changes"
+    }
+  ],
+  "current_version": "2.0.1 (DuckDB 2.0.0 'Cinnamon Teal' LTS, released 2026-10-21; Python package shown at 2.0.1 on the official install docs)",
+  "api_surface": [
+    "duckdb.connect(\"path.duckdb\") — persistent file-backed connection for the DuckDB store",
+    "con.sql(sql) / con.execute(sql) — run SQL, returns a lazy relation or cursor",
+    "con.register(name, df) — expose a pandas DataFrame to SQL by name (read-only)",
+    "CREATE TABLE ... AS SELECT * FROM df / INSERT INTO ... SELECT * FROM df — materialize fetched OHLCV data into persistent tables",
+    "relation.df() / .fetchdf() / .to_arrow_table() — pull query results back into pandas/Arrow for the backtest engine",
+    "duckdb.read_csv(\"file.csv\") / querying 'file.csv' directly in SQL — optional raw-cache ingestion path",
+    "relation.write_parquet(path) / relation.write_csv(path) — persist raw cache snapshots",
+    "pip install duckdb (Python package) — no server, no keys, local-only, satisfies 'free, keyless' constraint"
+  ],
+  "pitfalls": [
+    "Integer division/modulo by zero raises an error in 2.0 instead of returning NULL (1.x behavior) — guard fee/weight math.",
+    "Old single-arrow lambda SQL syntax removed under the new PEG parser in 2.0.",
+    "`fetchone()` removed from lazy relation objects returned by con.sql(); use execute()+fetchall()/df() instead.",
+    "Database files created by 2.0 are not readable by pre-2.0 DuckDB — one-way forward compatibility only.",
+    "C++17 now required to build DuckDB/extensions from source (irrelevant for pip-installed wheels, relevant only if compiling extensions).",
+    "S3 URL query-string credentials disabled by default in 2.0 (not applicable to this keyless, local-file build, but a trap if cloud storage is added later).",
+    "1.x LTS (1.5.6) remains supported only until 2027-03, and 1.4 until 2026-11 — do not pin to an EOL'd 1.4 line going forward."
+  ],
+  "uncertain": []
+}
