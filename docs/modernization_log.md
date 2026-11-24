@@ -93,6 +93,13 @@ modules to actually import them — the version numbers themselves do not change
 forward-declared and unused (PHASE_3_SPEC.md §2.2) pending whichever of Phase 5 or Phase 7 needs it
 first.
 
+### 3.1 DuckDB pin re-verification (2026-11-24)
+
+`pip index versions duckdb` was attempted live; the index did not return a version listing in this
+environment. The existing `duckdb==1.5.5` pin is therefore retained, and the Phase 2 `candles`
+table uses no 2.0-only feature. A future Phase 4+ pass should re-check the pin if intraday-scale
+row counts change the calculus.
+
 **PRIMARY KEY constraint-violation behaviour, verified live 2026-08-30 (PHASE_3_SPEC.md §5's own
 build-time verification item):** inserting two rows with an identical PRIMARY KEY and differing
 non-key values via `duckdb.connect()` + `CREATE TABLE ... PRIMARY KEY (...)` + two `INSERT`

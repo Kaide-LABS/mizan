@@ -66,6 +66,11 @@ def place_order(
     else:
         assert rejection is not None
         outcome = rejection
+    if isinstance(outcome, FillResult) and outcome.filled_quantity > requested_quantity:
+        raise NoIntentToFillError(
+            f"fill quantity {outcome.filled_quantity} exceeds requested quantity "
+            f"{requested_quantity}"
+        )
     return ResolvedOrder(
         side=side,
         ticker=ticker,

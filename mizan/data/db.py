@@ -18,6 +18,8 @@ import duckdb
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from mizan.crypto.models import CandleBar
+
 #: Column order `fundamentals_facts` is created with (§5.1) — the defensive column-set check in
 #: `ensure_schema` compares an already-existing table's actual columns against this tuple.
 _FUNDAMENTALS_FACTS_COLUMNS: tuple[str, ...] = (
@@ -52,6 +54,10 @@ _PRICE_BARS_COLUMNS: tuple[str, ...] = (
     "adj_volume",
     "div_cash",
     "split_factor",
+)
+_CANDLES_COLUMNS: tuple[str, ...] = (
+    "exchange", "symbol", "granularity", "ts", "open", "high", "low", "close",
+    "volume", "source", "ingested_at",
 )
 
 _CREATE_FUNDAMENTALS_FACTS = """
@@ -90,6 +96,14 @@ _CREATE_PRICE_BARS = """
         div_cash     DOUBLE  NOT NULL,
         split_factor DOUBLE  NOT NULL,
         PRIMARY KEY (ticker, trade_date)
+    )
+"""
+_CREATE_CANDLES = """
+    CREATE TABLE IF NOT EXISTS candles (
+        exchange VARCHAR NOT NULL, symbol VARCHAR NOT NULL, granularity VARCHAR NOT NULL,
+        ts TIMESTAMP NOT NULL, open DOUBLE NOT NULL, high DOUBLE NOT NULL, low DOUBLE NOT NULL,
+        close DOUBLE NOT NULL, volume DOUBLE NOT NULL, source VARCHAR NOT NULL,
+        ingested_at TIMESTAMP NOT NULL, PRIMARY KEY (exchange, symbol, granularity, ts)
     )
 """
 
@@ -139,6 +153,22 @@ def ensure_schema(con: duckdb.DuckDBPyConnection) -> None:
     _verify_columns(con, table="fundamentals_facts", expected_columns=_FUNDAMENTALS_FACTS_COLUMNS)
     con.execute(_CREATE_PRICE_BARS)
     _verify_columns(con, table="price_bars", expected_columns=_PRICE_BARS_COLUMNS)
+    con.execute(_CREATE_CANDLES)
+    _verify_columns(con, table="candles", expected_columns=_CANDLES_COLUMNS)
+
+
+def upsert_candles(con: duckdb.DuckDBPyConnection, bars: tuple[CandleBar, ...]) -> int:
+    """Insert normalized candles idempotently; batching is a later optimization."""
+    from datetime import UTC, datetime
+
+    for bar in bars:
+        ingested_at = datetime.now(UTC).replace(tzinfo=None)
+        con.execute(
+            "INSERT OR REPLACE INTO candles VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (bar.exchange, bar.symbol, bar.granularity, bar.ts.replace(tzinfo=None), bar.open,
+             bar.high, bar.low, bar.close, bar.volume, bar.source, ingested_at),
+        )
+    return len(bars)
 
 
 def _verify_columns(

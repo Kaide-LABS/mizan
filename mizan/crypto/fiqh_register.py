@@ -27,7 +27,7 @@ class CryptoFiqhParams(MizanBaseModel):
     )
     custody_model: FiqhParam[CustodyModel] = FiqhParam(
         register_id=3, value=CustodyModel.EXCHANGE_QABD_HUKMI,
-        source="Exchange custody accepted as qabd hukmi for V1.",
+        source="islamqa.info Q504160: exchange custody accepted as qabd hukmi for V1.",
         primary_source_gap=("FTX-type failure and freeze risk are caveated-not-modelled; "
                             "self-custody is the long-term target."),
     )

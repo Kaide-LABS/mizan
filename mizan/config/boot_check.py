@@ -127,7 +127,11 @@ def check_all() -> None:
 
 
 def check_crypto_fiqh_register(params: "CryptoFiqhParams | None" = None) -> None:
-    """Assert the four crypto fiqh entries retain their honesty metadata."""
+    """Assert crypto entries retain honesty metadata and governing fatwa citations.
+
+    Entry #4 has no numbered fatwa in the PRD, so its source is checked for non-emptiness
+    but deliberately has no numbered-citation requirement.
+    """
     from mizan.crypto.fiqh_register import CRYPTO_FIQH_PARAMS
 
     reg = CRYPTO_FIQH_PARAMS if params is None else params
@@ -148,6 +152,12 @@ def check_crypto_fiqh_register(params: "CryptoFiqhParams | None" = None) -> None
             problems.append(f"{name}: configurable must be True")
         if entry.register_id == 3 and not entry.primary_source_gap.strip():
             problems.append(f"{name}: custody entry requires primary_source_gap")
+        if entry.register_id in {1, 3} and "Q504160" not in entry.source:
+            problems.append(f"{name}: source must contain governing citation Q504160")
+        if entry.register_id == 2 and not any(
+            token in entry.source for token in ("Q106094", "Q125758", "Q310956")
+        ):
+            problems.append(f"{name}: source must contain a governing staking citation")
     if problems:
         raise FiqhRegisterError("; ".join(problems))
 
