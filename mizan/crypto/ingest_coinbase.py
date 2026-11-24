@@ -25,8 +25,13 @@ class UnsupportedGranularityError(RuntimeError):
 
 
 def fetch_coinbase_candles(
-    ticker: str, *, granularity: str, start: datetime, end: datetime,
-    client: httpx.Client, cache_dir: Path,
+    ticker: str,
+    *,
+    granularity: str,
+    start: datetime,
+    end: datetime,
+    client: httpx.Client,
+    cache_dir: Path,
 ) -> tuple[CandleBar, ...]:
     """Fetch cached Coinbase Exchange API candles in windows of at most 300 rows."""
     product = _COINBASE_PRODUCT_IDS[ticker]
@@ -63,9 +68,18 @@ def fetch_coinbase_candles(
             if not isinstance(raw, list):
                 raise ValueError("Coinbase candle row must be an array")
             ts, opening, high, low, close, volume = _parse_coinbase_row(raw)
-            bars[ts] = CandleBar(exchange="coinbase", symbol=ticker, granularity=granularity,
-                                 ts=ts, open=opening, high=high, low=low, close=close,
-                                 volume=volume, source="coinbase_exchange_api")
+            bars[ts] = CandleBar(
+                exchange="coinbase",
+                symbol=ticker,
+                granularity=granularity,
+                ts=ts,
+                open=opening,
+                high=high,
+                low=low,
+                close=close,
+                volume=volume,
+                source="coinbase_exchange_api",
+            )
         if window_start <= start or len(payload) < 300:
             break
         current_end = window_start

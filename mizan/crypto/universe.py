@@ -3,8 +3,20 @@
 from __future__ import annotations
 
 CRYPTO_UNIVERSE: tuple[str, ...] = (
-    "BTC", "LTC", "BCH", "ETH", "SOL", "ADA", "AVAX",
-    "DOT", "NEAR", "ATOM", "ALGO", "XRP", "XLM", "LINK",
+    "BTC",
+    "LTC",
+    "BCH",
+    "ETH",
+    "SOL",
+    "ADA",
+    "AVAX",
+    "DOT",
+    "NEAR",
+    "ATOM",
+    "ALGO",
+    "XRP",
+    "XLM",
+    "LINK",
 )
 CRYPTO_UNIVERSE_SET: frozenset[str] = frozenset(CRYPTO_UNIVERSE)
 
