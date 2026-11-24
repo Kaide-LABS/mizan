@@ -2,12 +2,12 @@
 
 ## What was built
 
-The coin-screening part of the tool now works. It can take each of the named coins and sort it into a religious-compliance category with a clear accept-or-reject verdict, covering all the coins on the list plus a set of coins that are always turned down. A safety fix was also made so that saving price data either fully succeeds or fully undoes itself, never leaving half-saved data. New automated checks were added to prove the screening behaves correctly, and all current checks — 452 of them — pass.
+The project now has a complete, tested foundation for the crypto compliance checker. It can take the 14 chosen coins (plus a list of coins to always reject), sort each into a business category, and give each one a plain religious-compliance verdict with its own written reason. It can also pull and store daily price history, drop incomplete days, and enforce the locked "hard rules." The full set of automated checks — now 487 of them — all pass, including the ones proving the locked rules can't be turned off.
 
 ## What was decided
 
-The work built on an earlier unfinished draft rather than starting over, to save time. Reusing it was double-checked first by confirming every existing check still passed before anything was touched.
+The strict religious rules were kept permanently locked on, as the project requires. A planned limitation in how price files are named on Windows was left as-is rather than fixed, because fixing it wasn't part of this stage's job — it was worked around in the tests and flagged for a human to review.
 
 ## What is uncertain
 
-This stage did not finish. A large batch of planned safety checks — especially around pulling in the daily price data and confirming the locked rules truly cannot be switched off — was not written, because there wasn't enough time. By the project's own standard, this stage cannot count as done until those checks exist and pass. That work still needs to be completed and re-verified before moving on.
+Three things need your attention. The Windows file-naming limitation still needs a human decision on whether to fix it later. The actual buy-and-hold backtest and the final HTML report are not built yet — they are planned for later stages. And one rule interpretation (whether trading fees may ever be set to exactly zero) should be confirmed as matching your intent.
