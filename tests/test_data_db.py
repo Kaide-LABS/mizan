@@ -200,11 +200,22 @@ def test_upsert_candles_happy_path_inserts_and_is_idempotent(tmp_path: Path) -> 
         con.close()
 
 
-def test_ensure_schema_creates_the_exact_candles_column_set(tmp_path: Path) -> None:
+def test_ensure_schema_creates_the_exact_column_set_for_all_three_tables(tmp_path: Path) -> None:
     con = db.connect(tmp_path / "mizan.duckdb")
     try:
         tables = {row[0] for row in con.execute("SHOW TABLES").fetchall()}
         assert {"fundamentals_facts", "price_bars", "candles"} <= tables
+
+        expected = {
+            "fundamentals_facts": db._FUNDAMENTALS_FACTS_COLUMNS,
+            "price_bars": db._PRICE_BARS_COLUMNS,
+            "candles": db._CANDLES_COLUMNS,
+        }
+        for table, expected_columns in expected.items():
+            actual_columns = tuple(
+                row[1] for row in con.execute(f"PRAGMA table_info('{table}')").fetchall()
+            )
+            assert actual_columns == expected_columns
     finally:
         con.close()
 
