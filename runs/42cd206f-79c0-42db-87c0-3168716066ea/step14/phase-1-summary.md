@@ -2,12 +2,12 @@
 
 ## What was built
 
-Nothing yet. This first stage did not finish, so none of the new crypto features exist or work at this point.
+The project's foundation was laid for its switch from a stock tool to a crypto one. The core safety rules are now in place and switched permanently on: research only, never trading with real money, no borrowing, no gambling-style fake orders, and no cash interest. The list of 14 coins to study and the written religious-compliance reasons behind the screening are set up. Automated tests were written and pass, including tests that prove the safety rules cannot be turned off.
 
 ## What was decided
 
-No choices about the product were made here. The stage stopped before any real work on the coin price history, compliance screening, or backtest could begin.
+The next stage of work was planned and written down in detail, so pricing data for the coins can be pulled from free sources later. One free data source was chosen as the main one with a second as backup, because it covers what this stage needs. These choices keep the build simple and within free tools.
 
 ## What is uncertain
 
-This stage did not complete — it failed right at the start. The automated system that carries out the work hit an internal error about a missing or malformed record of the project's starting point, and stopped before building anything. This is a setup or plumbing problem, not a sign that the plan itself is wrong. It needs attention before anything can move forward: the run has to be restarted once that startup error is sorted out. Until then, there is no report, no screening, and no test results to show.
+Five extra safety-related checks raised during review were not done yet and were deliberately pushed to the next stage. One technical tool may need updating, but that check hasn't been run. The team also couldn't save their finished work in the usual way due to a file-permission block, which needs attention.
