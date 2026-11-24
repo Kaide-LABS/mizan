@@ -158,16 +158,22 @@ def ensure_schema(con: duckdb.DuckDBPyConnection) -> None:
 
 
 def upsert_candles(con: duckdb.DuckDBPyConnection, bars: tuple[CandleBar, ...]) -> int:
-    """Insert normalized candles idempotently; batching is a later optimization."""
+    """Insert one ticker batch atomically and idempotently."""
     from datetime import UTC, datetime
 
-    for bar in bars:
-        ingested_at = datetime.now(UTC).replace(tzinfo=None)
-        con.execute(
-            "INSERT OR REPLACE INTO candles VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (bar.exchange, bar.symbol, bar.granularity, bar.ts.replace(tzinfo=None), bar.open,
-             bar.high, bar.low, bar.close, bar.volume, bar.source, ingested_at),
-        )
+    con.execute("BEGIN TRANSACTION")
+    try:
+        for bar in bars:
+            ingested_at = datetime.now(UTC).replace(tzinfo=None)
+            con.execute(
+                "INSERT OR REPLACE INTO candles VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (bar.exchange, bar.symbol, bar.granularity, bar.ts.replace(tzinfo=None), bar.open,
+                 bar.high, bar.low, bar.close, bar.volume, bar.source, ingested_at),
+            )
+        con.execute("COMMIT")
+    except Exception:
+        con.execute("ROLLBACK")
+        raise
     return len(bars)
 
 

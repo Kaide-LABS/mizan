@@ -8,22 +8,48 @@
 - You will know it works when one command does the whole run end-to-end, the report appears with all required sections, and the test suite passes -- including the locked-rule and no-fake-order tests.
 
 ## It did not finish
-One AI tool's hand-over note to the next could not be read, so the build was stopped rather than carry on from a possibly wrong state.
+One of the AI tools stopped the build on purpose and said it should not continue.
 
 ## Stage by stage
 
-### Stage 1 (did not complete)
+### Stage 1
 #### What was built
 
-Nothing yet. This first stage did not finish, so none of the new crypto features exist or work at this point.
+The project's foundation was laid for its switch from a stock tool to a crypto one. The core safety rules are now in place and switched permanently on: research only, never trading with real money, no borrowing, no gambling-style fake orders, and no cash interest. The list of 14 coins to study and the written religious-compliance reasons behind the screening are set up. Automated tests were written and pass, including tests that prove the safety rules cannot be turned off.
 
 #### What was decided
 
-No choices about the product were made here. The stage stopped before any real work on the coin price history, compliance screening, or backtest could begin.
+The next stage of work was planned and written down in detail, so pricing data for the coins can be pulled from free sources later. One free data source was chosen as the main one with a second as backup, because it covers what this stage needs. These choices keep the build simple and within free tools.
 
 #### What is uncertain
 
-This stage did not complete — it failed right at the start. The automated system that carries out the work hit an internal error about a missing or malformed record of the project's starting point, and stopped before building anything. This is a setup or plumbing problem, not a sign that the plan itself is wrong. It needs attention before anything can move forward: the run has to be restarted once that startup error is sorted out. Until then, there is no report, no screening, and no test results to show.
+Five extra safety-related checks raised during review were not done yet and were deliberately pushed to the next stage. One technical tool may need updating, but that check hasn't been run. The team also couldn't save their finished work in the usual way due to a file-permission block, which needs attention.
+
+### Stage 2
+#### What was built
+
+The groundwork for getting price history now exists. Mizan can reach out to a free public source to download daily coin prices, with a backup source if the first one is unavailable, and store them neatly without creating duplicates. It also now has a calendar that treats crypto as trading every day of the year, since coins never close for weekends or holidays. The programs that handle this were checked for quality and passed those checks.
+
+#### What was decided
+
+Prices come from one main free provider, with a second as backup, so a single outage doesn't stop the research. An older, stable version of one storage tool was kept rather than upgraded, to avoid surprises. These choices favour reliability over novelty.
+
+#### What is uncertain
+
+This stage did its building but did not finish its safety net. The specific tests meant to prove this stage's work behaves correctly were never written, and a required summary document for this stage was never created — both have been pushed into the next stage. The work also could not be saved properly at the time because the system blocked it. One minor reliability fix for saving prices is still outstanding. The next stage must close all of these gaps first.
+
+### Stage 3 (did not complete)
+#### What was built
+
+The coin-screening part of the tool now works. It can take each of the named coins and sort it into a religious-compliance category with a clear accept-or-reject verdict, covering all the coins on the list plus a set of coins that are always turned down. A safety fix was also made so that saving price data either fully succeeds or fully undoes itself, never leaving half-saved data. New automated checks were added to prove the screening behaves correctly, and all current checks — 452 of them — pass.
+
+#### What was decided
+
+The work built on an earlier unfinished draft rather than starting over, to save time. Reusing it was double-checked first by confirming every existing check still passed before anything was touched.
+
+#### What is uncertain
+
+This stage did not finish. A large batch of planned safety checks — especially around pulling in the daily price data and confirming the locked rules truly cannot be switched off — was not written, because there wasn't enough time. By the project's own standard, this stage cannot count as done until those checks exist and pass. That work still needs to be completed and re-verified before moving on.
 
 ## Choices made for you
 - (you confirmed this risky one) 'Periodic rebalance' for the baseline defaults to monthly, exposed as a config parameter.
@@ -32,14 +58,14 @@ This stage did not complete — it failed right at the start. The automated syst
 - (you confirmed this risky one) Backtest accounting is in USD with USDC treated as the 1:1 cash leg (no stablecoin depeg modelled).
 - (you confirmed this risky one) I cannot open the cited links (islamqa.info Q504160/Q106094/Q125758/Q310956 and the GitHub repos gods-eye-view, Agent-Reach, MiroFish, TimesFM); I relied solely on the descriptions given in the prompt and recorded their URLs verbatim as citations without verifying their contents.
 - (you confirmed this risky one) Kraken is used only when Coinbase lacks a token or sufficient history; where both have data, Coinbase candles are authoritative and sources are not blended within a single series.
-- The project will be built in six stages, starting with the core safety rules and crypto setup, then adding price data, screening, testing against history, and finally a readable report — all run by a single command.
-- It works only with a fixed list of 14 crypto tokens, judged against Islamic finance rules, with four adjustable settings (around stablecoins, staking, custody, and excluding meme coins).
-- Trading runs around the clock, every day, matching how crypto markets actually work rather than stock-market hours.
-- By design, an order can only ever either go through immediately or be turned down with a stated reason — there's no way to place an order you don't intend to complete, and no way to leave one sitting or cancel it. This enforces a key fairness rule.
-- An order with no real quantity or price is automatically refused, so empty or fake orders can't exist.
-- The older stock-market version of the tool is set aside, untouched; this is a fresh crypto-focused build alongside it, so nothing existing breaks.
-- Every time the tool starts, it checks all its safety rules up front, so nothing can run unless those rules hold.
-- It assumes tokens are held through the exchange for now; holding them yourself is named as a future goal but won't be available in this first version.
+- The project will be built in six stages, ending with a single command that fetches data, screens tokens, runs a test, and produces a shareable report.
+- It focuses only on crypto, covering a fixed list of 14 tokens; the older stock-market setup is kept untouched and set aside, not used.
+- Orders can only ever either complete or be turned down with a stated reason — there's no way to place a fake order you never mean to fill, by design, to keep trading honest.
+- An order with no real quantity or price is automatically refused, so empty or meaningless trades can't slip through.
+- The permissibility (fiqh) rules for crypto are their own fresh set, checked automatically every time the system starts, so nothing runs unless the rules pass.
+- It treats crypto as trading around the clock, every day, rather than on stock-market business hours.
+- Judging which specific tokens are allowed or rejected (and why) comes in a later stage, building on the fixed token list.
+- Long-term, holding your own crypto directly is planned, but this first version only supports holding it through an exchange.
 
 ## How it was checked
 - Research: 37 official documentation source(s), 3 academic paper(s) and 0 existing project(s) were consulted.
@@ -47,14 +73,15 @@ This stage did not complete — it failed right at the start. The automated syst
 - Every build stage was written by one AI and reviewed by a different one, and every change was recorded in git.
 
 ## What to look at
+- claude-code (opus) reviewed work written by claude-code (sonnet): the same model family but a different capability class.
 - This run was carried on from its saved spec: intake, research and spec were not repeated.
-- The build was carried on from phase 1: phases 1 to 0 were already finished and kept. 2 commit(s) from the interrupted attempt were folded back into the working tree so the reviewer still sees that work.
+- The build was carried on from phase 3: phases 1 to 2 were already finished and kept. 3 commit(s) from the interrupted attempt were folded back into the working tree so the reviewer still sees that work.
 
 ## For engineers (technical detail)
 
 _Everything above is written for non-engineers; this is the raw detail behind it._
 
-- `Phase 1's own runDispatch() call did not complete successfully: ✖ Invalid string: must match pattern /^([0-9a-f]{40}|[0-9a-f]{64})$/ → at repo.head_before ✖ Invalid string: must match pattern /^([0-9a-f]{40}|[0-9a-f]{64})$/ → at repo.head_after.`
+- `Phase 3's own runDispatch() call did not complete successfully: turn reported status "blocked".`
 - `decision: The whole pivot is 6 build phases (P1 invariant+intent foundations & crypto config; P2 crypto ingestion + 24/7 clock + candles store; P3 token screening; P4 baseline backtest with fees/slippage; P5 signal-adapter seam; P6 HTML report + single pipeline command).`
 - `decision: "Reuse as-is: invariants module" is read as reuse-and-extend under the module's own documented rule ("adding a field requires adding its check to boot_check in the same diff"): Phase 1 adds three crypto hard-invariant fields and three hand-written checks; no existing field, default, or meaning changes; the existing field-count test is updated in the same change (a surfaced edit, not a silent one).`
 - `decision: The crypto fiqh register is a NEW model ('CryptoFiqhParams') separate from the parked equity 'FiqhParams', reusing the existing 'FiqhParam[T]' generic and 'VerificationStatus' enum. The equity AAOIFI register stays unchanged and parked.`
@@ -68,4 +95,4 @@ _Everything above is written for non-engineers; this is the raw detail behind it
 - `decision: 'CustodyModel' defines 'EXCHANGE_QABD_HUKMI' (V1 default) and 'SELF_CUSTODY' (the PRD's declared long-term target); the self-custody path is not implemented in V1.`
 - `decision: boot_check reuses 'FiqhRegisterError' for the crypto register; 'check_all()' runs the crypto register check in addition to the existing checks, so every CLI entrypoint already gates on it.`
 - `decision: Architecture: kept the original plan after an independent review -- The locked PRD scopes a narrow V1 whose single acceptance gate is "one command runs fetch→screen→backtest→report," and which mandates reusing the shipped in-process modules as-is — the Artifact-Gated Pipeline's value (replayable stages, versioned manifests, cross-process provenance) is bought with orchestration, serialization, and DuckDB-locking code that no acceptance criterion requires and that the "reuse as-is / additive pivot" constraint actively discourages. Its one genuinely relevant benefit, grant-facing prove`
-- `tokens (estimated): 32015 total -- file_exploration 78%, research_input 0%, handoffs 2%, spec_prd 4%, tool_output 10%, model_output 6%`
+- `tokens (estimated): 35993 total -- file_exploration 20%, research_input 0%, handoffs 16%, spec_prd 26%, tool_output 9%, model_output 30%`

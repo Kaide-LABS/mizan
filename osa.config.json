@@ -3,7 +3,7 @@
     "planner": { "provider": "claude", "model": "opus" },
     "researcher": { "provider": "claude", "model": "sonnet" },
     "crossChecker": { "provider": "claude", "model": "opus" },
-    "builder": { "provider": "codex" },
+    "builder": { "provider": "claude", "model": "sonnet" },
     "reviewer": { "provider": "claude", "model": "sonnet" },
     "lateralArchitecture": { "provider": "codex" },
     "implication": { "provider": "claude", "model": "opus" },

@@ -33,3 +33,42 @@ def test_intent_module_has_no_network_or_live_order_capability() -> None:
     assert not {
         term for term in forbidden_terms if term in intent_source.lower()
     }
+
+
+def test_forbidden_module_scan_already_walks_into_mizan_crypto() -> None:
+    """`package_root.rglob("*.py")` in the test above already recurses into
+    `mizan/crypto/`, so no code change was needed there -- this only makes that
+    coverage explicit per PHASE_2_SPEC.md §B7 / PHASE_3_SPEC.md A0.10."""
+    package_root = Path(__file__).parents[1] / "mizan"
+    crypto_paths = {p.as_posix() for p in (package_root / "crypto").rglob("*.py")}
+    assert crypto_paths, "mizan/crypto/ must contain a module for this check to mean anything"
+
+
+def test_crypto_clock_and_models_have_no_network_capability() -> None:
+    package_root = Path(__file__).parents[1] / "mizan"
+    for name in ("clock.py", "models.py"):
+        source = (package_root / "crypto" / name).read_text(encoding="utf-8").lower()
+        assert "httpx" not in source
+        assert "socket" not in source
+
+
+def test_crypto_screening_module_has_no_network_or_db_capability() -> None:
+    source = (
+        Path(__file__).parents[1] / "mizan/crypto/screening.py"
+    ).read_text(encoding="utf-8").lower()
+    for forbidden in ("httpx", "duckdb", "socket"):
+        assert forbidden not in source
+
+
+def test_crypto_clock_module_never_imports_the_equity_rebalance_clock() -> None:
+    package_root = Path(__file__).parents[1] / "mizan" / "crypto"
+    forbidden = ("mizan.backtest.clock", "generate_rebalance_dates")
+    for path in package_root.rglob("*.py"):
+        source = path.read_text(encoding="utf-8")
+        assert not any(term in source for term in forbidden), path
+
+
+def test_phase2_governing_spec_copy_exists_on_disk() -> None:
+    spec_path = Path(__file__).parents[1] / "docs/crypto/PHASE_2_SPEC.md"
+    assert spec_path.exists()
+    assert spec_path.read_text(encoding="utf-8").splitlines()[0].startswith("# Phase 2")
