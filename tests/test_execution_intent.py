@@ -1,6 +1,9 @@
-import pytest
-from pydantic import ValidationError
+import inspect
 
+import pytest
+from pydantic import BaseModel, ValidationError
+
+from mizan.execution import intent as intent_module
 from mizan.execution.intent import (
     FillResult,
     NoIntentToFillError,
@@ -76,3 +79,38 @@ def test_no_cancelable_or_resting_order_type_exists() -> None:
 def test_rejection_requires_a_reason_detail() -> None:
     with pytest.raises(ValidationError):
         OrderRejection(reason=RejectionReason.NO_LIQUIDITY, detail="")
+
+
+def test_overfill_is_not_intent_to_fill() -> None:
+    with pytest.raises(NoIntentToFillError):
+        place_order(
+            side=OrderSide.BUY,
+            ticker="BTC",
+            requested_quantity=1.0,
+            fill=FillResult(filled_quantity=1000.0, fill_price=100.0),
+        )
+
+
+def test_fill_exactly_matching_requested_quantity_is_allowed() -> None:
+    order = place_order(
+        side=OrderSide.BUY,
+        ticker="BTC",
+        requested_quantity=1.0,
+        fill=FillResult(filled_quantity=1.0, fill_price=100.0),
+    )
+    assert order.outcome.kind == "fill"
+
+
+def test_no_public_class_in_execution_module_exposes_a_mutation_or_resting_state() -> None:
+    classes = [
+        obj
+        for _, obj in inspect.getmembers(intent_module, inspect.isclass)
+        if obj.__module__ == intent_module.__name__
+    ]
+    assert classes
+    forbidden_fields = {"status", "pending", "open", "resting", "cancelable"}
+    for cls in classes:
+        assert not hasattr(cls, "cancel")
+        assert not hasattr(cls, "amend")
+        if issubclass(cls, BaseModel):
+            assert not forbidden_fields & set(cls.model_fields)

@@ -12,11 +12,13 @@ from __future__ import annotations
 import subprocess
 import sys
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 
 import duckdb
 import pytest
 
+from mizan.crypto.models import CandleBar
 from mizan.data import db
 
 # ── connect() (§4.1) ─────────────────────────────────────────────────────────────────────────────
@@ -163,6 +165,79 @@ def test_second_writable_connection_to_a_locked_file_raises_across_processes(
     finally:
         holder.kill()
         holder.wait(timeout=5)
+
+
+def _bar(**overrides: object) -> CandleBar:
+    defaults: dict[str, object] = {
+        "exchange": "coinbase",
+        "symbol": "BTC",
+        "granularity": "1d",
+        "ts": datetime(2024, 1, 1, tzinfo=UTC),
+        "open": 1.0,
+        "high": 2.0,
+        "low": 0.5,
+        "close": 1.5,
+        "volume": 10.0,
+        "source": "coinbase_exchange_api",
+    }
+    defaults.update(overrides)
+    return CandleBar(**defaults)  # type: ignore[arg-type]
+
+
+def test_upsert_candles_happy_path_inserts_and_is_idempotent(tmp_path: Path) -> None:
+    con = db.connect(tmp_path / "mizan.duckdb")
+    try:
+        bars = (_bar(),)
+        db.upsert_candles(con, bars)
+        rows = con.execute("SELECT open, high, low, close, volume FROM candles").fetchall()
+        assert rows == [(1.0, 2.0, 0.5, 1.5, 10.0)]
+
+        db.upsert_candles(con, bars)
+        count = con.execute("SELECT count(*) FROM candles").fetchone()
+        assert count is not None
+        assert count[0] == 1
+    finally:
+        con.close()
+
+
+def test_ensure_schema_creates_the_exact_candles_column_set(tmp_path: Path) -> None:
+    con = db.connect(tmp_path / "mizan.duckdb")
+    try:
+        tables = {row[0] for row in con.execute("SHOW TABLES").fetchall()}
+        assert {"fundamentals_facts", "price_bars", "candles"} <= tables
+    finally:
+        con.close()
+
+
+def test_upsert_candles_overwrites_changed_values_for_the_same_key(tmp_path: Path) -> None:
+    con = db.connect(tmp_path / "mizan.duckdb")
+    try:
+        db.upsert_candles(con, (_bar(close=1.5, volume=10.0),))
+        db.upsert_candles(con, (_bar(close=9.9, volume=99.0),))
+        rows = con.execute("SELECT close, volume FROM candles").fetchall()
+        assert rows == [(9.9, 99.0)]
+    finally:
+        con.close()
+
+
+def test_upsert_candles_is_all_or_nothing_on_a_mid_batch_failure(tmp_path: Path) -> None:
+    con = db.connect(tmp_path / "mizan.duckdb")
+    try:
+        good = _bar(symbol="BTC", ts=datetime(2024, 1, 1, tzinfo=UTC))
+
+        class _ExplodesOnSecondItem:
+            def __iter__(self) -> object:
+                yield good
+                raise RuntimeError("forced mid-batch failure")
+
+        with pytest.raises(RuntimeError, match="forced mid-batch failure"):
+            db.upsert_candles(con, _ExplodesOnSecondItem())  # type: ignore[arg-type]
+
+        count = con.execute("SELECT count(*) FROM candles").fetchone()
+        assert count is not None
+        assert count[0] == 0
+    finally:
+        con.close()
 
 
 def test_second_same_process_connection_shares_the_instance_and_does_not_raise(

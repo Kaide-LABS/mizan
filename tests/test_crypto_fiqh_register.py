@@ -62,6 +62,26 @@ def test_check_rejects_status_drift() -> None:
         check_crypto_fiqh_register(broken)
 
 
+def test_check_rejects_a_source_missing_its_governing_citation() -> None:
+    broken = CRYPTO_FIQH_PARAMS.model_copy(update={
+        "stablecoins_allowed": CRYPTO_FIQH_PARAMS.stablecoins_allowed.model_copy(
+            update={"source": "see docs"}
+        )
+    })
+    with pytest.raises(Exception, match="citation"):
+        check_crypto_fiqh_register(broken)
+
+
+def test_check_rejects_entry_two_with_the_wrong_fatwa_number() -> None:
+    broken = CRYPTO_FIQH_PARAMS.model_copy(update={
+        "staking_rewards_enabled": CRYPTO_FIQH_PARAMS.staking_rewards_enabled.model_copy(
+            update={"source": "see Q999999 only"}
+        )
+    })
+    with pytest.raises(Exception, match="citation"):
+        check_crypto_fiqh_register(broken)
+
+
 def test_default_values() -> None:
     assert CRYPTO_FIQH_PARAMS.stablecoins_allowed.value is True
     assert CRYPTO_FIQH_PARAMS.staking_rewards_enabled.value is False
