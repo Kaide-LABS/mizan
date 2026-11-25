@@ -51,18 +51,31 @@ The strict religious rules were kept permanently locked on, as the project requi
 
 Three things need your attention. The Windows file-naming limitation still needs a human decision on whether to fix it later. The actual buy-and-hold backtest and the final HTML report are not built yet — they are planned for later stages. And one rule interpretation (whether trading fees may ever be set to exactly zero) should be confirmed as matching your intent.
 
-### Stage 4 (did not complete)
+### Stage 4
 #### What was built
 
-The part of Mizan that runs the pretend investment test now exists. It can take the price history of the approved coins, split money evenly across them, "hold" them over time, and work out the result after subtracting realistic trading fees. New automatic checks confirm this fee-aware calculation behaves correctly, and the full battery of checks — including the ones that prove the locked religious-compliance rules cannot be turned off — all passed.
+The part of Mizan that runs the pretend investment test now works. It takes the approved coins, spreads money evenly across them, holds them over time, and applies realistic trading fees — all on paper, with no real money. It can also figure out which coins passed the religious-compliance screen and work out the test's rebalancing dates. A full set of automated checks for this piece now exists and all of them pass.
 
 #### What was decided
 
-Trading fees are always treated as a real, non-zero cost, because a test that ignored fees would flatter the results and mislead. This was built in deliberately rather than left as an easy-to-forget setting.
+Trading fees are permanently switched on and can never be set to zero, so every test reflects real-world costs — this was chosen to keep results honest. The coin list is always read fresh each run rather than remembered from before, to avoid stale results.
 
 #### What is uncertain
 
-The stage was flagged as "not completed" — but this appears to be a paperwork mismatch, not a problem with the actual work: the code was finished, saved, and all checks passed. Worth a human confirming the records line up. Also still unfinished: the final report page and the single start-to-finish command that ties everything together are planned but not yet built. One minor open question remains about file naming on Windows that may need attention in a later stage.
+This stage is finished, but the project is not. The report that a grant judge would read, and the single command that runs everything start-to-finish, are still not built. One open point: whether a future stage should allow a zero-fee check for testing. Also, one reviewer ended up checking their own earlier work rather than a second person doing it.
+
+### Stage 5 (did not complete)
+#### What was built
+
+Nothing new works yet from this stage. This step of the build was attempted but did not finish, so none of its intended progress is in place.
+
+#### What was decided
+
+No real choices were made on your behalf here, because the work stopped before it could get going. The earlier plan still stands: crypto-only, strict Islamic-finance rules, research and backtesting with no real money.
+
+#### What is uncertain
+
+This stage did not complete — that is the main thing to know. It stopped early because of a technical mismatch: the system expected a specific kind of reference code (a long fingerprint-style identifier) and got something in the wrong format, so it refused to continue. This is a setup problem, not a sign that the overall approach is wrong. It needs an engineer to correct that reference before the stage can be run again. Until then, this piece of the work has not moved forward, and anything that was meant to depend on it is also waiting.
 
 ## Choices made for you
 - (you confirmed this risky one) 'Periodic rebalance' for the baseline defaults to monthly, exposed as a config parameter.
@@ -71,14 +84,14 @@ The stage was flagged as "not completed" — but this appears to be a paperwork 
 - (you confirmed this risky one) Backtest accounting is in USD with USDC treated as the 1:1 cash leg (no stablecoin depeg modelled).
 - (you confirmed this risky one) I cannot open the cited links (islamqa.info Q504160/Q106094/Q125758/Q310956 and the GitHub repos gods-eye-view, Agent-Reach, MiroFish, TimesFM); I relied solely on the descriptions given in the prompt and recorded their URLs verbatim as citations without verifying their contents.
 - (you confirmed this risky one) Kraken is used only when Coinbase lacks a token or sufficient history; where both have data, Coinbase candles are authoritative and sources are not blended within a single series.
-- The project will be built in six stages, ending with a single command that fetches data, screens coins, tests a strategy, and produces a report.
-- It focuses only on crypto for now; the earlier stock-market work is set aside, untouched, and left for later.
-- It covers a fixed list of 14 coins, with a few religious-compliance settings (stablecoins, staking, custody, meme-coin exclusion) you can adjust.
-- By design, every trade either completes or is refused with a stated reason — there's no way to place an order you don't intend to honor, and no leftover or cancelable orders. Empty "zero-amount" trades are also refused.
-- Religious-compliance rules are checked automatically every time you run it, so nothing can run without passing those checks.
-- It runs around the clock to match crypto markets, rather than following stock-market trading hours.
-- Decisions about which specific coins pass or fail the compliance screen come in a later stage, not yet.
-- Self-custody (holding your own coins) is named as a future goal but won't work in this first version — it assumes coins are held at an exchange.
+- The system will be built in six stages, ending with a single command that fetches data, screens tokens, runs a test, and produces a report.
+- It focuses on crypto (not stocks), starting with a fixed list of 14 tokens; the older stock-market work is set aside but left intact.
+- Religious (fiqh) permissibility rules are built in and checked every time the system starts, so nothing runs unless it passes those checks.
+- By design, the system can only either complete a trade or refuse it with a stated reason — there is no way to place an order you don't intend to fill, and no lingering or cancelable orders. This structurally prevents a forbidden "fake order" practice.
+- It runs around the clock to match crypto markets, rather than following stock-exchange trading hours.
+- Trading tests account for real-world costs like fees and price slippage, so results are more realistic.
+- For now it works with tokens held on an exchange; holding your own tokens directly is planned but not available yet.
+- The final report is a self-contained page with the religious reasoning and cautions included, suitable for sharing with reviewers or grant applications.
 
 ## How it was checked
 - Research: 37 official documentation source(s), 3 academic paper(s) and 0 existing project(s) were consulted.
@@ -88,13 +101,14 @@ The stage was flagged as "not completed" — but this appears to be a paperwork 
 ## What to look at
 - claude-code (opus) reviewed work written by claude-code (sonnet): the same model family but a different capability class.
 - This run was carried on from its saved spec: intake, research and spec were not repeated.
-- The build was carried on from phase 4: phases 1 to 3 were already finished and kept. 5 commit(s) from the interrupted attempt were folded back into the working tree so the reviewer still sees that work.
+- The build was carried on from phase 4: phases 1 to 3 were already finished and kept. 4 commit(s) from the interrupted attempt were folded back into the working tree so the reviewer still sees that work.
+- phase 4: Turn 2 (reviewer/claude-code) is reviewing its own prior work: the reviewer seat and the seat whose diff it reviews are the same provider and the same model (role_pins left no other seat eligible, or no second model was set).
 
 ## For engineers (technical detail)
 
 _Everything above is written for non-engineers; this is the raw detail behind it._
 
-- `Phase 4's own runDispatch() call did not complete successfully: HandoffRecord failed re-validation after ground-truth reconciliation (this is a reconciliation inconsistency -- ground truth contradicts the agent's own report -- not a raw schema defect): ✖ status === "completed" implies repo.commits.length >= 1 (R3) → at repo.commits.`
+- `Phase 5's own runDispatch() call did not complete successfully: ✖ Invalid string: must match pattern /^[0-9a-f]{64}$/ → at spec_ref.sha256.`
 - `decision: The whole pivot is 6 build phases (P1 invariant+intent foundations & crypto config; P2 crypto ingestion + 24/7 clock + candles store; P3 token screening; P4 baseline backtest with fees/slippage; P5 signal-adapter seam; P6 HTML report + single pipeline command).`
 - `decision: "Reuse as-is: invariants module" is read as reuse-and-extend under the module's own documented rule ("adding a field requires adding its check to boot_check in the same diff"): Phase 1 adds three crypto hard-invariant fields and three hand-written checks; no existing field, default, or meaning changes; the existing field-count test is updated in the same change (a surfaced edit, not a silent one).`
 - `decision: The crypto fiqh register is a NEW model ('CryptoFiqhParams') separate from the parked equity 'FiqhParams', reusing the existing 'FiqhParam[T]' generic and 'VerificationStatus' enum. The equity AAOIFI register stays unchanged and parked.`
@@ -108,4 +122,4 @@ _Everything above is written for non-engineers; this is the raw detail behind it
 - `decision: 'CustodyModel' defines 'EXCHANGE_QABD_HUKMI' (V1 default) and 'SELF_CUSTODY' (the PRD's declared long-term target); the self-custody path is not implemented in V1.`
 - `decision: boot_check reuses 'FiqhRegisterError' for the crypto register; 'check_all()' runs the crypto register check in addition to the existing checks, so every CLI entrypoint already gates on it.`
 - `decision: Architecture: kept the original plan after an independent review -- The locked PRD scopes a narrow V1 whose single acceptance gate is "one command runs fetch→screen→backtest→report," and which mandates reusing the shipped in-process modules as-is — the Artifact-Gated Pipeline's value (replayable stages, versioned manifests, cross-process provenance) is bought with orchestration, serialization, and DuckDB-locking code that no acceptance criterion requires and that the "reuse as-is / additive pivot" constraint actively discourages. Its one genuinely relevant benefit, grant-facing prove`
-- `tokens (estimated): 22468 total -- file_exploration 12%, research_input 0%, handoffs 63%, spec_prd 7%, tool_output 1%, model_output 17%`
+- `tokens (estimated): 122785 total -- file_exploration 9%, research_input 0%, handoffs 24%, spec_prd 58%, tool_output 0%, model_output 9%`
