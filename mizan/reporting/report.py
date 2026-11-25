@@ -95,6 +95,12 @@ CAVEAT_DESCRIPTIONS: dict[Caveat, str] = {
         "scholar-ratified ruling. The full register, with every entry's current status, is "
         "rendered below."
     ),
+    Caveat.CUSTODY_FREEZE_RISK: (
+        "Exchange-custody and freeze risk: crypto assets in this backtest are modelled as held "
+        "in exchange custody (qabd hukmi, constructive possession), not self-custodied. "
+        "Exchange failure (FTX-type) and asset-freeze risk are not modelled anywhere in this "
+        "run's numbers; self-custody is this project's long-term target, not its current state."
+    ),
 }
 assert set(CAVEAT_DESCRIPTIONS) == set(Caveat), (
     "CAVEAT_DESCRIPTIONS must cover every mizan.core.caveats.Caveat member exactly — a caveat with "

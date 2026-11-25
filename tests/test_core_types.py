@@ -84,13 +84,15 @@ def test_verdict_is_a_str_enum() -> None:
 # ── Caveat ──────────────────────────────────────────────────────────────────────────────────────
 
 
-def test_caveat_has_exactly_three_members() -> None:
-    """The caveat set must not silently shrink below baby_prd.md AC #4's three (AC 9, guard G11)."""
-    assert len(Caveat) == 3
+def test_caveat_has_exactly_four_members() -> None:
+    """The caveat set must not silently shrink below baby_prd.md AC #4's three (AC 9, guard G11),
+    and must include Phase 6's additive CUSTODY_FREEZE_RISK member (PHASE_6_SPEC.md §A2)."""
+    assert len(Caveat) == 4
     assert {member.name for member in Caveat} == {
         "LOOK_AHEAD_BIAS",
         "SURVIVORSHIP_BIAS",
         "PENDING_SCHOLARLY_VERIFICATION",
+        "CUSTODY_FREEZE_RISK",
     }
 
 

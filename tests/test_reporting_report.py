@@ -198,7 +198,7 @@ def test_caveat_descriptions_cover_every_caveat_member() -> None:
 
 def test_all_three_caveat_descriptions_appear_verbatim() -> None:
     generated_html = render_report(_report_input(_nonzero_ledger()), active_caveats=_ALL_CAVEATS)
-    for caveat in Caveat:
+    for caveat in _ALL_CAVEATS:
         assert CAVEAT_DESCRIPTIONS[caveat] in generated_html
 
 

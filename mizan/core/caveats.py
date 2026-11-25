@@ -28,11 +28,19 @@ class Caveat(StrEnum):
         At least one fiqh judgment call in the run's configuration is unratified. Given
         ``FiqhParams``' Phase 1 shape, this is true of every run: all 11 register entries carry
         ``VerificationStatus.PENDING_SCHOLARLY_VERIFICATION``.
+
+    CUSTODY_FREEZE_RISK
+        Exchange custody is accepted as qabd hukmi (constructive possession) for crypto V1
+        (``CryptoFiqhParams.custody_model``, register #3). FTX-type exchange failure and
+        asset-freeze risk are NOT modelled anywhere in this backtest; self-custody is the
+        long-term target. Applies whenever a run's ``CryptoFiqhParams.custody_model`` is
+        ``EXCHANGE_QABD_HUKMI``.
     """
 
     LOOK_AHEAD_BIAS = "look_ahead_bias"
     SURVIVORSHIP_BIAS = "survivorship_bias"
     PENDING_SCHOLARLY_VERIFICATION = "pending_scholarly_verification"
+    CUSTODY_FREEZE_RISK = "custody_freeze_risk"
 
 
 class ResultEnvelope(MizanBaseModel):
