@@ -2,12 +2,12 @@
 
 ## What was built
 
-The part of Mizan that runs the pretend investment test now exists. It can take the price history of the approved coins, split money evenly across them, "hold" them over time, and work out the result after subtracting realistic trading fees. New automatic checks confirm this fee-aware calculation behaves correctly, and the full battery of checks — including the ones that prove the locked religious-compliance rules cannot be turned off — all passed.
+The part of Mizan that runs the pretend investment test now works. It takes the approved coins, spreads money evenly across them, holds them over time, and applies realistic trading fees — all on paper, with no real money. It can also figure out which coins passed the religious-compliance screen and work out the test's rebalancing dates. A full set of automated checks for this piece now exists and all of them pass.
 
 ## What was decided
 
-Trading fees are always treated as a real, non-zero cost, because a test that ignored fees would flatter the results and mislead. This was built in deliberately rather than left as an easy-to-forget setting.
+Trading fees are permanently switched on and can never be set to zero, so every test reflects real-world costs — this was chosen to keep results honest. The coin list is always read fresh each run rather than remembered from before, to avoid stale results.
 
 ## What is uncertain
 
-The stage was flagged as "not completed" — but this appears to be a paperwork mismatch, not a problem with the actual work: the code was finished, saved, and all checks passed. Worth a human confirming the records line up. Also still unfinished: the final report page and the single start-to-finish command that ties everything together are planned but not yet built. One minor open question remains about file naming on Windows that may need attention in a later stage.
+This stage is finished, but the project is not. The report that a grant judge would read, and the single command that runs everything start-to-finish, are still not built. One open point: whether a future stage should allow a zero-fee check for testing. Also, one reviewer ended up checking their own earlier work rather than a second person doing it.
