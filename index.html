@@ -1,0 +1,402 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>The Mizan Manifesto</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Institutional-grade finance for everyone: ethics written into code, and AI predictions that must prove themselves before they touch money.">
+<meta property="og:title" content="The Mizan Manifesto">
+<meta property="og:description" content="Institutional-grade finance for everyone: ethics written into code, and AI predictions that must prove themselves before they touch money.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=DM+Serif+Display:ital@0;1&family=IBM+Plex+Mono:wght@400;500&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap">
+<style>
+/* Layout: one reading column on cool assay-paper; chapter numerals hang in a brass margin like weights beside a ledger. */
+:root {
+  --paper: #ECEFEA;
+  --paper-2: #E2E7E1;
+  --ink: #14201E;
+  --muted: #56625F;
+  --brass: #94661B;
+  --verdigris: #2E6B62;
+  --rule: #C6CEC8;
+  --display: "DM Serif Display", "Iowan Old Style", Georgia, serif;
+  --body: "Source Serif 4", "Iowan Old Style", Georgia, serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --arabic: "Amiri", "Traditional Arabic", "Geeza Pro", serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0F1514; --paper-2: #151D1B; --ink: #E3E8E2; --muted: #98A49F;
+    --brass: #D3A449; --verdigris: #6FB2A5; --rule: #27322F; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0F1514; --paper-2: #151D1B; --ink: #E3E8E2; --muted: #98A49F;
+  --brass: #D3A449; --verdigris: #6FB2A5; --rule: #27322F; color-scheme: dark;
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--body);
+  font-size: 1.125rem;
+  line-height: 1.68;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0 4rem;
+  -webkit-font-smoothing: antialiased;
+}
+.page { max-width: 54rem; margin: 0 auto; }
+
+/* ---------- hero ---------- */
+.hero {
+  display: grid;
+  gap: 1.5rem;
+  padding-block: 4.5rem 3rem;
+  border-bottom: 1px solid var(--rule);
+}
+.eyebrow {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  display: flex; flex-wrap: wrap; gap: 0.4rem 1.1rem;
+}
+.title-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 1.5rem; flex-wrap: wrap; }
+h1 {
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: clamp(3.4rem, 11vw, 7.25rem);
+  line-height: 0.92;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+h1 em { font-style: italic; color: var(--brass); }
+.arabic {
+  font-family: var(--arabic);
+  font-size: clamp(2.6rem, 8vw, 4.5rem);
+  line-height: 1;
+  color: var(--verdigris);
+  direction: rtl;
+}
+.lede {
+  font-size: clamp(1.2rem, 2.6vw, 1.45rem);
+  line-height: 1.5;
+  max-width: 38ch;
+  margin: 0;
+  text-wrap: balance;
+}
+.scale { width: 100%; max-width: 30rem; height: auto; color: var(--ink); }
+.scale .beam { transform-origin: 200px 46px; transform-box: view-box; animation: settle 3.2s cubic-bezier(.35,1.4,.45,1) 0.3s both; }
+.scale .pan-l { animation: pan-l 3.2s cubic-bezier(.35,1.4,.45,1) 0.3s both; }
+.scale .pan-r { animation: pan-r 3.2s cubic-bezier(.35,1.4,.45,1) 0.3s both; }
+@keyframes settle { from { transform: rotate(-9deg); } to { transform: rotate(0deg); } }
+@keyframes pan-l { from { transform: translateY(24px); } to { transform: translateY(0); } }
+@keyframes pan-r { from { transform: translateY(-24px); } to { transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .scale .beam, .scale .pan-l, .scale .pan-r { animation: none; } }
+
+/* ---------- epigraph + contents ---------- */
+.epigraph {
+  display: grid; gap: 0.75rem;
+  padding-block: 2.75rem;
+  border-bottom: 1px solid var(--rule);
+  max-width: 40rem;
+}
+.epigraph .ar { font-family: var(--arabic); font-size: 1.6rem; line-height: 1.9; direction: rtl; color: var(--verdigris); }
+.epigraph blockquote { margin: 0; font-style: italic; font-size: 1.15rem; }
+.epigraph .src, .note { font-family: var(--mono); font-size: 0.8rem; color: var(--muted); letter-spacing: 0.02em; }
+
+.contents { padding-block: 2.5rem; border-bottom: 1px solid var(--rule); }
+.contents h2 { font-family: var(--mono); font-weight: 500; font-size: 0.78rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin: 0 0 1rem; }
+.contents ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.35rem; }
+.contents a { display: grid; grid-template-columns: 3.2rem 1fr; gap: 0.5rem; text-decoration: none; color: var(--ink); padding: 0.3rem 0; border-radius: 2px; }
+.contents a span:first-child { font-family: var(--mono); color: var(--brass); font-size: 0.9rem; padding-top: 0.15rem; }
+.contents a span:last-child { font-family: var(--display); font-size: 1.35rem; line-height: 1.25; }
+.contents a:hover span:last-child, .contents a:focus-visible span:last-child { color: var(--verdigris); }
+a:focus-visible { outline: 2px solid var(--verdigris); outline-offset: 3px; }
+
+/* ---------- chapters ---------- */
+.chapter {
+  display: grid;
+  grid-template-columns: 7rem minmax(0, 1fr);
+  gap: 0 2rem;
+  padding-block: 3.5rem;
+  border-bottom: 1px solid var(--rule);
+  scroll-margin-top: 1rem;
+}
+.numeral {
+  font-family: var(--display);
+  font-size: 4.5rem;
+  line-height: 0.9;
+  color: var(--brass);
+  text-align: right;
+}
+.chapter-body { max-width: 66ch; min-width: 0; }
+.chapter h2 {
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: clamp(2rem, 4.6vw, 2.75rem);
+  line-height: 1.08;
+  margin: 0 0 1.5rem;
+  text-wrap: balance;
+}
+.chapter p { margin: 0 0 1.15rem; }
+.pull {
+  font-family: var(--display);
+  font-size: clamp(1.45rem, 3.2vw, 1.85rem);
+  line-height: 1.3;
+  color: var(--verdigris);
+  margin: 1.75rem 0;
+  text-wrap: balance;
+}
+.terms { display: grid; gap: 1rem; margin: 1.5rem 0; }
+.term { display: grid; grid-template-columns: 9rem minmax(0, 1fr); gap: 1rem; padding-top: 1rem; border-top: 1px solid var(--rule); }
+.term b { font-family: var(--mono); font-weight: 500; font-size: 0.82rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--brass); padding-top: 0.3rem; }
+.term p { margin: 0; }
+
+ul.ledger { list-style: none; margin: 1.25rem 0 1.5rem; padding: 0; display: grid; gap: 0.6rem; }
+ul.ledger li { display: grid; grid-template-columns: 1.4rem minmax(0, 1fr); gap: 0.6rem; }
+ul.ledger li::before { content: "\2013"; color: var(--brass); font-family: var(--mono); }
+ul.ledger.done li::before { content: "\2713"; color: var(--verdigris); }
+ul.ledger.todo li::before { content: "\25CB"; color: var(--muted); }
+
+.status { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.5rem; margin: 1.5rem 0; }
+.status h3 { font-family: var(--mono); font-weight: 500; font-size: 0.78rem; letter-spacing: 0.12em; text-transform: uppercase; margin: 0; color: var(--muted); }
+.status > div { background: var(--paper-2); padding: 1.25rem 1.25rem 0.5rem; border-radius: 3px; min-width: 0; }
+
+/* ---------- creed ---------- */
+.creed { padding-block: 4rem 3rem; display: grid; gap: 1.75rem; }
+.creed h2 { font-family: var(--display); font-weight: 400; font-size: clamp(2.4rem, 6vw, 3.6rem); line-height: 1; margin: 0; }
+.creed ol { margin: 0; padding: 0; list-style: none; display: grid; gap: 0; counter-reset: c; }
+.creed li {
+  counter-increment: c;
+  display: grid; grid-template-columns: 3rem minmax(0, 1fr); gap: 1rem; align-items: baseline;
+  padding-block: 1rem; border-top: 1px solid var(--rule);
+  font-family: var(--display); font-size: clamp(1.4rem, 3.4vw, 1.9rem); line-height: 1.25;
+}
+.creed li:last-child { border-bottom: 1px solid var(--rule); }
+.creed li::before { content: counter(c); font-family: var(--mono); font-size: 0.9rem; color: var(--brass); }
+
+footer { display: flex; flex-wrap: wrap; gap: 0.75rem 2rem; font-family: var(--mono); font-size: 0.82rem; color: var(--muted); padding-top: 1rem; }
+footer a { color: var(--verdigris); text-underline-offset: 3px; }
+.chapter a { color: var(--verdigris); text-underline-offset: 3px; }
+
+@media (max-width: 720px) {
+  .chapter { grid-template-columns: minmax(0, 1fr); padding-block: 2.75rem; }
+  .numeral { text-align: left; font-size: 3rem; margin-bottom: 0.5rem; }
+  .term { grid-template-columns: minmax(0, 1fr); gap: 0.25rem; }
+  .status { grid-template-columns: minmax(0, 1fr); }
+  body { font-size: 1.06rem; }
+}
+html{color-scheme:light}body{margin:0}
+</style>
+</head>
+<body>
+
+
+<div class="page">
+
+<header class="hero">
+  <div class="eyebrow"><span>A manifesto</span><span>Hafeedh Balogun</span><span>Lagos</span><span>November 2026</span></div>
+  <div class="title-row">
+    <h1>The <em>Balance</em></h1>
+    <div class="arabic" lang="ar">ميزان</div>
+  </div>
+  <svg class="scale" viewBox="0 0 400 150" role="img" aria-label="A balance scale settling level">
+    <line x1="200" y1="46" x2="200" y2="138" stroke="currentColor" stroke-width="2.5"/>
+    <path d="M168 140 h64" stroke="currentColor" stroke-width="2.5" fill="none"/>
+    <circle cx="200" cy="40" r="6" fill="var(--brass)"/>
+    <g class="beam">
+      <line x1="60" y1="46" x2="340" y2="46" stroke="currentColor" stroke-width="2.5"/>
+      <g class="pan-l">
+        <line x1="60" y1="46" x2="36" y2="104" stroke="currentColor" stroke-width="1.2"/>
+        <line x1="60" y1="46" x2="84" y2="104" stroke="currentColor" stroke-width="1.2"/>
+        <path d="M28 104 Q60 126 92 104 Z" fill="var(--verdigris)"/>
+      </g>
+      <g class="pan-r">
+        <line x1="340" y1="46" x2="316" y2="104" stroke="currentColor" stroke-width="1.2"/>
+        <line x1="340" y1="46" x2="364" y2="104" stroke="currentColor" stroke-width="1.2"/>
+        <path d="M308 104 Q340 126 372 104 Z" fill="var(--brass)"/>
+      </g>
+    </g>
+  </svg>
+  <p class="lede">The tools that decide who builds wealth are locked inside institutions. I am building the version that belongs to everyone, with the ethics written into the code and every prediction forced to prove itself before it touches a single dollar.</p>
+</header>
+
+<section class="epigraph" aria-label="Epigraph">
+  <div class="ar" lang="ar">أَلَّا تَطْغَوْا فِي الْمِيزَانِ ۝ وَأَقِيمُوا الْوَزْنَ بِالْقِسْطِ وَلَا تُخْسِرُوا الْمِيزَانَ</div>
+  <blockquote>“That you not transgress within the balance. And establish weight in justice and do not make deficient the balance.”</blockquote>
+  <div class="src">Qur’an 55:8–9 · Mizan is the Arabic word for the balance, the scale used to weigh fairly.</div>
+</section>
+
+<nav class="contents" aria-label="Contents">
+  <h2>Contents</h2>
+  <ol>
+    <li><a href="#preface"><span>0</span><span>Preface</span></a></li>
+    <li><a href="#gap"><span>I</span><span>The Gap</span></a></li>
+    <li><a href="#trust"><span>II</span><span>Claims You Cannot Check</span></a></li>
+    <li><a href="#code"><span>III</span><span>Ethics Written as Code</span></a></li>
+    <li><a href="#predict"><span>IV</span><span>Predictions Must Earn the Right to Act</span></a></li>
+    <li><a href="#decentral"><span>V</span><span>Nobody Can Say No to You</span></a></li>
+    <li><a href="#today"><span>VI</span><span>What Exists Today</span></a></li>
+    <li><a href="#why"><span>VII</span><span>Why I Am Building This</span></a></li>
+  </ol>
+</nav>
+
+<section class="chapter" id="preface">
+  <div class="numeral">0</div>
+  <div class="chapter-body">
+    <h2>Preface</h2>
+    <p>You can see the future of money first inside a handful of trading firms. Their machines read the news before you finish the headline. They model how millions of people will react to it. They place their trades before the crowd moves, and they do it all day, every day, in markets that never close.</p>
+    <p>Everyone else is on the other side of those trades.</p>
+    <p>Nobody planned this. It is a gap in tools. The people with the best forecasting, the fastest execution and the deepest data get richer from the people without them, and the people without them are almost everyone: the retail trader on a phone app, the saver whose deposits a bank puts to work, the family that keeps its money out of the system because it does not trust the system.</p>
+    <p class="pull">AI is about to make this gap far wider or far narrower. Which one depends on who builds what next.</p>
+    <p>This is what I am building, and why.</p>
+  </div>
+</section>
+
+<section class="chapter" id="gap">
+  <div class="numeral">I</div>
+  <div class="chapter-body">
+    <h2>The Gap</h2>
+    <p>Three things separate an institution from an ordinary person in a market.</p>
+    <div class="terms">
+      <div class="term"><b>Information</b><p>A fund reads filings, news, sentiment and order flow at once and turns them into forecasts. An individual reads a headline after it has already moved the price.</p></div>
+      <div class="term"><b>Speed</b><p>A fund acts in milliseconds. An individual acts the next time they open the app.</p></div>
+      <div class="term"><b>Protection</b><p>A fund knows when it is being baited. An individual is the one talked into borrowed bets that a small move wipes out, misled by large orders placed only to fool them, and filled at a worse price by someone who saw the order coming.</p></div>
+    </div>
+    <p>Retail finance has answered this gap with products that profit from it: trading apps that earn on how often you trade, leverage sold as opportunity, and savings accounts that pay you a sliver while your deposits earn the bank far more.</p>
+    <p>The evidence is clearest where the products are riskiest. A London Business School study of US retail options trading found that ordinary traders favour cheap, short-dated options with wide spreads and lose money on average, in a market where the firms executing their orders pay brokers for the right to do so. Short-dated bets, borrowed money and derivatives are exactly the products Mizan refuses to offer.</p>
+    <p>The effect is quiet and it compounds. Wealth flows toward whoever holds the better tools. More than a billion adults still have no bank account at all, and many of the rest are customers of a system built to earn from them.</p>
+    <p class="note">Retail options: Bryzgalova, Pavlova and Sikorskaya, “Retail Trading in Options and the Rise of the Big Three Wholesalers”, London Business School (<a href="https://lbsresearch.london.edu/id/eprint/2827/">LBS Research Online</a>). Unbanked adults: World Bank, Global Findex Database.</p>
+  </div>
+</section>
+
+<section class="chapter" id="trust">
+  <div class="numeral">II</div>
+  <div class="chapter-body">
+    <h2>Claims You Cannot Check</h2>
+    <p>Most of finance runs on claims you have no way to inspect.</p>
+    <p>A bank says your money is yours, yet banks and states can freeze an account overnight. A product says it is ethical, or halal, yet someone you will never meet decided what that means. A forecast says the price will rise, and it sounds exactly as confident when it is wrong as when it is right.</p>
+    <p>The answer is to need less faith in other people's claims. Every claim the system makes about your money, its ethics or its predictions should be something you can check for yourself.</p>
+    <p>That idea runs through everything below. Ownership you hold directly. Rules you can read. Forecasts with a public record of how often they were right.</p>
+  </div>
+</section>
+
+<section class="chapter" id="code">
+  <div class="numeral">III</div>
+  <div class="chapter-body">
+    <h2>Ethics Written as Code</h2>
+    <p>An ethical promise is only as strong as the people keeping it. A rule written into the code is stronger, because breaking it means changing the code, in public, where anyone can see.</p>
+    <p>Mizan's rules are locked. They are checked every time the system starts, and the test suite proves they cannot be switched off.</p>
+    <ul class="ledger">
+      <li>You only hold assets you own outright. No leverage, no margin, no borrowing.</li>
+      <li>No interest, earned or paid.</li>
+      <li>No futures, options or other bets on prices of things you do not hold.</li>
+      <li>No fake orders. The system has no way to place an order it does not intend to fill.</li>
+      <li>Every asset is screened, with a written reason for every verdict. Tokens built on lending or pure speculation are rejected, and the reason is on the page.</li>
+      <li>Fees and slippage are never zero in a backtest, so the results are never flattered.</li>
+    </ul>
+    <p>The first rule set is Islamic finance, drawn from a published ruling on trading crypto (islamqa.info, question 504160). I chose it because it is one of the oldest and most precise codes of ethical finance in the world, precise enough to turn into tests. Where scholars disagree, Mizan records the question as open, with its sources, and leaves it visible.</p>
+    <p class="pull">You do not need to share my faith to want these rules.</p>
+    <p>Anyone who wants money that does not feed on debt, leverage and manipulation wants the same thing. Islamic finance is the first rule set because it is exact. The principle underneath it is universal.</p>
+  </div>
+</section>
+
+<section class="chapter" id="predict">
+  <div class="numeral">IV</div>
+  <div class="chapter-body">
+    <h2>Predictions Must Earn the Right to Act</h2>
+    <p>The institutions' real edge is prediction. Mizan is built to bring that edge out into the open, at two speeds.</p>
+    <div class="terms">
+      <div class="term"><b>Slow layer</b><p>Reads world events and asks two questions: what is likely to happen, and how will people and markets react when it does? It combines global event data, crowd-reaction simulation with MiroFish, and Inkling 2, a model designed to know how sure it should be.</p></div>
+      <div class="term"><b>Fast layer</b><p>Acts on those forecasts. It uses TimesFM for short-horizon forecasting and trades spot assets only, quickly, inside the locked rules.</p></div>
+      <div class="term"><b>The gate</b><p>Sits between them, and it is the part I care about most.</p></div>
+    </div>
+    <p>A forecast is a claim, and claims get tested. No signal is allowed to move a single dollar until it has:</p>
+    <ul class="ledger">
+      <li>been tested on data it has never seen;</li>
+      <li>shown that its confidence matches how often it is right;</li>
+      <li>reported its errors asset by asset and across different market conditions;</li>
+      <li>beaten simple baselines, including the plain assumption that tomorrow looks like today.</li>
+    </ul>
+    <p class="pull">Most AI products ask you to believe them. Mizan makes its AI show its work first.</p>
+  </div>
+</section>
+
+<section class="chapter" id="decentral">
+  <div class="numeral">V</div>
+  <div class="chapter-body">
+    <h2>Nobody Can Say No to You</h2>
+    <p>Decentralisation comes down to one question: who can say no to you?</p>
+    <p>Mizan holds only spot assets you own outright, so no lender can call in a loan and no counterparty can close your position. Self-custody is the goal. Until then, the risk of holding assets on an exchange, including the chance that an exchange freezes or fails, is stated in plain language on every report.</p>
+    <p>Access is the other half. Individuals will use Mizan directly. Institutions will be able to license it on two conditions: the rules stay locked, and the returns reach the savers whose money it is. That means banks, credit unions, cooperatives and funds built on that promise, reaching people who will never download a trading app.</p>
+  </div>
+</section>
+
+<section class="chapter" id="today">
+  <div class="numeral">VI</div>
+  <div class="chapter-body">
+    <h2>What Exists Today</h2>
+    <p>I would rather show you a smaller thing that is true than a bigger thing that is not.</p>
+    <div class="status">
+      <div>
+        <h3>Built and tested</h3>
+        <ul class="ledger done">
+          <li>The locked rules and the start-up check that enforces them.</li>
+          <li>The asset screen, with a written reason for every verdict and the rulings it relies on.</li>
+          <li>Price-history ingestion from public exchange data.</li>
+          <li>A fee-aware backtester that runs around the clock, because crypto never closes.</li>
+          <li>The validation gate every future prediction must pass.</li>
+          <li>A plain-language report with every caveat on the page.</li>
+          <li>One command that runs the whole chain, backed by 565 automated tests.</li>
+        </ul>
+      </div>
+      <div>
+        <h3>Next</h3>
+        <ul class="ledger todo">
+          <li>A full run on real market data.</li>
+          <li>The slow layer: events, crowd simulation, calibrated forecasts.</li>
+          <li>The fast layer: short-horizon forecasting and spot execution.</li>
+          <li>Live trading, only after the gate says yes.</li>
+          <li>Self-custody.</li>
+        </ul>
+      </div>
+    </div>
+    <p>The gate is already built and waiting. Nothing that comes next can skip it.</p>
+    <p>The code is open: <a href="https://github.com/Kaide-LABS/mizan">github.com/Kaide-LABS/mizan</a>.</p>
+  </div>
+</section>
+
+<section class="chapter" id="why">
+  <div class="numeral">VII</div>
+  <div class="chapter-body">
+    <h2>Why I Am Building This</h2>
+    <p>I am from Lagos, a long way from the rooms where these tools get built. Nobody handed me access to anything. I got into rooms with founders by building something that worked and showing it to them cold.</p>
+    <p>I build the same way I want Mizan to work. My own build tool, <a href="https://github.com/Kaide-LABS/osa">OSA</a>, is designed so that one AI model writes the code and a different one reviews it, and then the finished thing is tested against every requirement before it counts. Mizan was built with it.</p>
+    <p>The machine does the work. The rules, the tests and the evidence decide whether it counts. I think that is how finance should work too, for everyone, and not only for the people who already own the best machines.</p>
+  </div>
+</section>
+
+<section class="creed" aria-label="Five commitments">
+  <h2>Five commitments</h2>
+  <ol>
+    <li>Own what you hold.</li>
+    <li>No interest, no leverage, no fake orders.</li>
+    <li>Every prediction proves itself before it acts.</li>
+    <li>Every rule and every result is open to inspection.</li>
+    <li>The gains reach the people whose money it is.</li>
+  </ol>
+  <footer>
+    <span>Hafeedh Balogun · Kaide Labs</span>
+    <a href="https://github.com/Kaide-LABS/mizan">Mizan on GitHub</a>
+    <a href="https://github.com/Kaide-LABS/osa">OSA on GitHub</a>
+  </footer>
+</section>
+
+</div>
+
+</body>
+</html>
