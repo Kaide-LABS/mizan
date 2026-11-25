@@ -11,9 +11,14 @@ from datetime import date
 import matplotlib.pyplot as plt
 
 from mizan.backtest.clock import DailySnapshot
+from mizan.crypto.backtest import DailySnapshot as CryptoDailySnapshot
 from mizan.purification.attribution import DivestmentPurificationEntry
 from mizan.purification.ledger import DividendPurificationEntry, PurificationLedger
-from mizan.reporting.plots import render_equity_curve_plot, render_purification_by_ticker_plot
+from mizan.reporting.plots import (
+    render_crypto_equity_curve_plot,
+    render_equity_curve_plot,
+    render_purification_by_ticker_plot,
+)
 
 _PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 
@@ -129,6 +134,29 @@ def test_render_purification_by_ticker_plot_handles_all_zero_amount_entries() ->
 
 
 # ── No matplotlib figure leakage across repeated calls within one process (§4.2) ──────────────────
+
+
+def _crypto_snapshots() -> tuple[CryptoDailySnapshot, ...]:
+    return (
+        CryptoDailySnapshot(
+            as_of_date=date(2026, 1, 1), cash=0.0, holdings={}, portfolio_value=1000.0
+        ),
+        CryptoDailySnapshot(
+            as_of_date=date(2026, 2, 1), cash=0.0, holdings={}, portfolio_value=1010.0
+        ),
+    )
+
+
+def test_render_crypto_equity_curve_plot_returns_valid_png_bytes() -> None:
+    png_bytes = render_crypto_equity_curve_plot(_crypto_snapshots())
+    assert isinstance(png_bytes, bytes)
+    assert png_bytes.startswith(_PNG_MAGIC)
+    assert len(png_bytes) > 0
+
+
+def test_render_crypto_equity_curve_plot_handles_empty_daily_snapshots() -> None:
+    png_bytes = render_crypto_equity_curve_plot(())
+    assert png_bytes.startswith(_PNG_MAGIC)
 
 
 def test_repeated_calls_do_not_leak_matplotlib_figures() -> None:

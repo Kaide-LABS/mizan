@@ -5,9 +5,22 @@ Implements PHASE_6_SPEC.md §A5 (Part A).
 
 from __future__ import annotations
 
+from datetime import date
+
+import pytest
+
+from mizan.config.fiqh_params import FiqhParam
+from mizan.core.caveats import Caveat
 from mizan.core.verdict import Verdict
-from mizan.crypto.fiqh_register import CRYPTO_FIQH_PARAMS
-from mizan.crypto.report import render_crypto_fiqh_register, render_crypto_token_verdicts
+from mizan.crypto.backtest import BacktestCostParams, CryptoBacktestResult, DailySnapshot
+from mizan.crypto.fiqh_register import CRYPTO_FIQH_PARAMS, CryptoFiqhParams, CustodyModel
+from mizan.crypto.report import (
+    CryptoReportInput,
+    render_crypto_fiqh_register,
+    render_crypto_report,
+    render_crypto_token_verdicts,
+    resolve_crypto_report_caveats,
+)
 from mizan.crypto.screening import CryptoTokenVerdict, screen_universe
 from mizan.screening.verdict import ReasonTraceEntry, ScreenName
 
@@ -60,3 +73,55 @@ def test_render_crypto_token_verdicts_escapes_html() -> None:
     html_out = render_crypto_token_verdicts((verdict,))
     assert "&lt;b&gt;" in html_out
     assert "&amp;" in html_out
+
+
+def _backtest_result() -> CryptoBacktestResult:
+    return CryptoBacktestResult(
+        strategy_label="baseline",
+        daily_snapshots=(
+            DailySnapshot(
+                as_of_date=date(2026, 1, 1), cash=0.0, holdings={}, portfolio_value=1000.0
+            ),
+        ),
+        rebalance_dates=(date(2026, 1, 1),),
+        excluded_tickers=("AAVE",),
+        cost_params=BacktestCostParams(),
+    )
+
+
+def _report_input() -> CryptoReportInput:
+    return CryptoReportInput(
+        backtest_result=_backtest_result(), token_verdicts=_verdicts_from_screen_universe()
+    )
+
+
+def test_resolve_crypto_report_caveats_adds_custody_risk_for_exchange_custody() -> None:
+    result = resolve_crypto_report_caveats((Caveat.SURVIVORSHIP_BIAS,), CRYPTO_FIQH_PARAMS)
+    assert result == (Caveat.SURVIVORSHIP_BIAS, Caveat.CUSTODY_FREEZE_RISK)
+
+
+def test_resolve_crypto_report_caveats_excludes_custody_risk_for_self_custody() -> None:
+    self_custody_params = CryptoFiqhParams(
+        custody_model=FiqhParam(
+            register_id=3, value=CustodyModel.SELF_CUSTODY, source="test"
+        )
+    )
+    result = resolve_crypto_report_caveats((Caveat.SURVIVORSHIP_BIAS,), self_custody_params)
+    assert result == (Caveat.SURVIVORSHIP_BIAS,)
+
+
+def test_render_crypto_report_contains_survivorship_and_custody_caveat_text() -> None:
+    html_out = render_crypto_report(
+        _report_input(),
+        active_caveats=(Caveat.SURVIVORSHIP_BIAS, Caveat.CUSTODY_FREEZE_RISK),
+    )
+    assert html_out.startswith("<!DOCTYPE html>")
+    from mizan.reporting.report import CAVEAT_DESCRIPTIONS
+
+    assert CAVEAT_DESCRIPTIONS[Caveat.SURVIVORSHIP_BIAS] in html_out
+    assert CAVEAT_DESCRIPTIONS[Caveat.CUSTODY_FREEZE_RISK] in html_out
+
+
+def test_render_crypto_report_requires_active_caveats_keyword() -> None:
+    with pytest.raises(TypeError):
+        render_crypto_report(_report_input())  # type: ignore[call-arg]

@@ -24,6 +24,7 @@ if TYPE_CHECKING:
     from datetime import date
 
     from mizan.backtest.clock import DailySnapshot
+    from mizan.crypto.backtest import DailySnapshot as CryptoDailySnapshot
     from mizan.purification.ledger import PurificationLedger
 
 
@@ -74,6 +75,40 @@ def render_equity_curve_plot(
         ]
         axes.plot(dates, gross_values, label="Gross portfolio value")
         axes.plot(dates, net_values, label="Net-of-purification portfolio value")
+        axes.set_xlabel("Date")
+        axes.set_ylabel("Portfolio value")
+        axes.legend()
+        figure.autofmt_xdate()
+
+    buffer = io.BytesIO()
+    figure.savefig(buffer, format="png")
+    plt.close(figure)
+    return buffer.getvalue()
+
+
+def render_crypto_equity_curve_plot(daily_snapshots: tuple[CryptoDailySnapshot, ...]) -> bytes:
+    """Renders one PNG (via the `Agg` backend): `portfolio_value` at each `as_of_date`, one line —
+    crypto has no gross-vs-net-of-purification split to plot a second line for (crypto
+    purification is near-empty per the baby PRD). Implements `docs/crypto/PHASE_6_SPEC.md` §B2.
+
+    `daily_snapshots == ()` renders the same "No trading days in this backtest window." single-
+    panel annotation `render_equity_curve_plot` already uses for its own empty case.
+    """
+    figure, axes = plt.subplots()
+    if not daily_snapshots:
+        axes.text(
+            0.5,
+            0.5,
+            "No trading days in this backtest window.",
+            ha="center",
+            va="center",
+            transform=axes.transAxes,
+        )
+        axes.set_axis_off()
+    else:
+        dates = [snapshot.as_of_date for snapshot in daily_snapshots]
+        values = [snapshot.portfolio_value for snapshot in daily_snapshots]
+        axes.plot(dates, values, label="Portfolio value")
         axes.set_xlabel("Date")
         axes.set_ylabel("Portfolio value")
         axes.legend()

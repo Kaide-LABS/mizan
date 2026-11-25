@@ -10,6 +10,7 @@ import sys
 from collections.abc import Callable, Sequence
 
 from mizan.cli import backtest as backtest_cli
+from mizan.cli import crypto as crypto_cli
 from mizan.cli import ingest as ingest_cli
 from mizan.cli import normalize as normalize_cli
 from mizan.cli import report as report_cli
@@ -39,6 +40,7 @@ def build_parser() -> argparse.ArgumentParser:
     screen_cli.add_subparser(subparsers)
     backtest_cli.add_subparser(subparsers)
     report_cli.add_subparser(subparsers)
+    crypto_cli.add_subparser(subparsers)
     return parser
 
 

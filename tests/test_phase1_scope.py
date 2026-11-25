@@ -127,3 +127,42 @@ def test_phase5_governing_spec_copy_exists_on_disk() -> None:
     spec_path = Path(__file__).parents[1] / "docs/crypto/PHASE_5_SPEC.md"
     assert spec_path.exists()
     assert spec_path.read_text(encoding="utf-8").splitlines()[0].startswith("# Phase 5")
+
+
+def test_crypto_pipeline_cli_takes_no_ticker_flag() -> None:
+    source = (Path(__file__).parents[1] / "mizan/cli/crypto.py").read_text(encoding="utf-8")
+    assert "--ticker" not in source
+
+
+def test_crypto_report_module_has_no_network_capability() -> None:
+    source = (
+        Path(__file__).parents[1] / "mizan/crypto/report.py"
+    ).read_text(encoding="utf-8").lower()
+    for forbidden in ("httpx", "requests", "socket"):
+        assert forbidden not in source
+
+
+def test_equity_cli_verbs_and_modules_still_import_after_crypto_pipeline_lands() -> None:
+    import mizan.cli.backtest
+    import mizan.cli.ingest
+    import mizan.cli.normalize
+    import mizan.cli.report
+    import mizan.cli.screen
+    import mizan.data.ingest_edgar
+    import mizan.screening.financial_ratios  # noqa: F401
+    from mizan.cli.main import build_parser
+
+    parser = build_parser()
+    subparsers_action = next(
+        action
+        for action in parser._actions
+        if isinstance(action, __import__("argparse")._SubParsersAction)
+    )
+    verb_names = set(subparsers_action.choices)
+    assert {"ingest", "normalize", "screen", "backtest", "report", "crypto-pipeline"} <= verb_names
+
+
+def test_phase6_governing_spec_copy_exists_on_disk() -> None:
+    spec_path = Path(__file__).parents[1] / "docs/crypto/PHASE_6_SPEC.md"
+    assert spec_path.exists()
+    assert spec_path.read_text(encoding="utf-8").splitlines()[0].startswith("# Phase 6")
