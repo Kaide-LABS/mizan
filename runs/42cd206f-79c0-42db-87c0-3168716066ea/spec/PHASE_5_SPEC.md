@@ -328,6 +328,14 @@ error and baseline-beating validation", and §"TimesFM as zero-shot numeric base
 technical-source dependency — `pydantic`'s discriminated-union support is already exercised by
 `mizan.execution.intent.ResolvedOrder` (Phase 1).
 
+This spec was checked against the Phase 4 code actually shipped (`mizan/crypto/backtest.py`, HEAD
+`59d2013`), not only against `PHASE_4_SPEC.md`'s text: `Strategy`/`EqualWeightStrategy` are imported
+from `mizan.backtest.strategy` exactly as cited here, `run_crypto_backtest` and
+`CryptoBacktestResult` exist with the signatures this spec's "Out of scope" section assumes, and
+`mizan.execution.intent`'s `FillResult`/`OrderRejection` discriminated union (`outcome: FillResult |
+OrderRejection = Field(discriminator="kind")`) is confirmed as the real precedent §A3 mirrors — no
+drift was found between the shipped code and the assumptions this spec makes about it.
+
 ## Out of scope for this phase
 - Any concrete `SignalAdapter` implementation (gods-eye-view, Agent-Reach, MiroFish, TimesFM,
   Inkling 2 Small) — contract/interface only, per the locked PRD and this run's own research
