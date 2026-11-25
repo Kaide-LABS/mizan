@@ -18,3 +18,5 @@ What went wrong in past runs and what resolved it. One fact per line.
 - Phase 4 did not complete: claude-code: The AI provider could not be reached (a network drop or a provider-side outage). It usually clears within minutes. _(run 42cd206f, 2026-11-24)_
 - Phase 4 did not complete: HandoffRecord failed re-validation after ground-truth reconciliation (this is a reconciliation inconsistency -- ground truth contradicts the agent's own report -- not a raw schema defect): ✖ status === "completed" implies repo.commits.length >= 1... _(run 42cd206f, 2026-11-25)_
 - Phase 5 did not complete: ✖ Invalid string: must match pattern /^[0-9a-f]{64}$/ → at spec_ref.sha256 _(run 42cd206f, 2026-11-25)_
+- Run stopped: The finished project did not pass the final check. _(run 42cd206f, 2026-11-25)_
+- The final check could not be carried out: ✖ Too big: expected string to have <=1500 characters → at notes _(run 42cd206f, 2026-11-25)_
