@@ -16,6 +16,15 @@ _COINBASE_PRODUCT_IDS = {ticker: f"{ticker}-USD" for ticker in CRYPTO_UNIVERSE}
 _COINBASE_GRANULARITY_SECONDS = {"1d": 86400}
 
 
+def _key_stamp(moment: datetime) -> str:
+    """ISO-8601 timestamp made safe for use inside a cache filename.
+
+    Colons are illegal in Windows filenames (OSError Errno 22), so they become hyphens. This is
+    used for the cache KEY only; the request parameters keep the exact ISO-8601 form.
+    """
+    return moment.isoformat().replace(":", "-")
+
+
 class CoinbaseProductNotFoundError(RuntimeError):
     """Raised when Coinbase has no product for a universe ticker."""
 
@@ -43,7 +52,7 @@ def fetch_coinbase_candles(
     first = True
     while current_end > start:
         window_start = max(start, current_end - timedelta(seconds=seconds * 300))
-        key = f"{ticker}_{granularity}_{window_start.isoformat()}_{current_end.isoformat()}"
+        key = f"{ticker}_{granularity}_{_key_stamp(window_start)}_{_key_stamp(current_end)}"
         path = cache_path(cache_dir=cache_dir, source="coinbase/candles", key=key)
         if is_cached(path):
             payload = read_raw_json(path)
