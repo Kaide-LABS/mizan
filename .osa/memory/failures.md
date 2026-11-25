@@ -15,3 +15,5 @@ What went wrong in past runs and what resolved it. One fact per line.
 - Phase 3 did not complete: codex-cli: The AI provider stopped with an error (it exited with code 1). _(run 42cd206f, 2026-11-24)_
 - Run stopped: One of the AI tools stopped the build on purpose and said it should not continue. _(run 42cd206f, 2026-11-24)_
 - Phase 3 did not complete: turn reported status "blocked" _(run 42cd206f, 2026-11-24)_
+- Phase 4 did not complete: claude-code: The AI provider could not be reached (a network drop or a provider-side outage). It usually clears within minutes. _(run 42cd206f, 2026-11-24)_
+- Phase 4 did not complete: HandoffRecord failed re-validation after ground-truth reconciliation (this is a reconciliation inconsistency -- ground truth contradicts the agent's own report -- not a raw schema defect): ✖ status === "completed" implies repo.commits.length >= 1... _(run 42cd206f, 2026-11-25)_

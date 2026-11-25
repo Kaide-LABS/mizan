@@ -8,3 +8,4 @@ Daily OHLCV ingestion for all 14 tokens now exists with Coinbase-primary/Kraken-
 
 Run `mizan-boot-check` to prove the invariant and fiqh boundaries hold before later pipeline phases execute.
 The 14-token universe and nine-token default-reject list now each have a documented per-token verdict; screening is not yet wired to a CLI verb (Phase 6).
+A baseline equal-weight, periodic-rebalance backtest over the compliant universe now exists, with a per-side taker-fee and slippage cost model that is never zero by default; it is not yet wired to a CLI verb (Phase 6).

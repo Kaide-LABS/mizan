@@ -72,3 +72,20 @@ def test_phase2_governing_spec_copy_exists_on_disk() -> None:
     spec_path = Path(__file__).parents[1] / "docs/crypto/PHASE_2_SPEC.md"
     assert spec_path.exists()
     assert spec_path.read_text(encoding="utf-8").splitlines()[0].startswith("# Phase 2")
+
+
+def test_crypto_backtest_module_has_no_network_capability() -> None:
+    """`duckdb` is explicitly PERMITTED in this file (it reads the local `candles` store) --
+    unlike `mizan/crypto/screening.py`'s own no-`duckdb` assertion, this test only checks for
+    network/process-escape capability, not for `duckdb` itself."""
+    source = (
+        Path(__file__).parents[1] / "mizan/crypto/backtest.py"
+    ).read_text(encoding="utf-8").lower()
+    for forbidden in ("httpx", "socket"):
+        assert forbidden not in source
+
+
+def test_phase4_governing_spec_copy_exists_on_disk() -> None:
+    spec_path = Path(__file__).parents[1] / "docs/crypto/PHASE_4_SPEC.md"
+    assert spec_path.exists()
+    assert spec_path.read_text(encoding="utf-8").splitlines()[0].startswith("# Phase 4")
