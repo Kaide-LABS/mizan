@@ -1,0 +1,8 @@
+{
+  "passed": false,
+  "results": [],
+  "unmet": [],
+  "downgraded": [],
+  "couldNotRun": "✖ Too big: expected string to have <=1500 characters\n  → at notes",
+  "notes": ""
+}
